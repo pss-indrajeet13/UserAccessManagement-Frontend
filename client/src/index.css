@@ -1,0 +1,142 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/icon?family=Material+Icons');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: hsl(0 0% 98%);
+  --foreground: hsl(210 25% 7.8431%);
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(210 25% 7.8431%);
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(210 25% 7.8431%);
+  --primary: hsl(207 89% 42%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(210 11% 26%);
+  --secondary-foreground: hsl(0 0% 100%);
+  --muted: hsl(240 2% 90%);
+  --muted-foreground: hsl(210 25% 7.8431%);
+  --accent: hsl(211 51% 93%);
+  --accent-foreground: hsl(207 89% 42%);
+  --destructive: hsl(4 91% 54%);
+  --destructive-foreground: hsl(0 0% 100%);
+  --border: hsl(201 30% 91%);
+  --input: hsl(200 23% 97%);
+  --ring: hsl(207 89% 42%);
+  --success: hsl(122 39% 49%);
+  --warning: hsl(36 100% 50%);
+  --error: hsl(4 91% 54%);
+  --surface: hsl(0 0% 100%);
+  --chart-1: hsl(207 89% 42%);
+  --chart-2: hsl(122 39% 49%);
+  --chart-3: hsl(36 100% 50%);
+  --chart-4: hsl(147 79% 42%);
+  --chart-5: hsl(341 75% 51%);
+  --sidebar: hsl(0 0% 100%);
+  --sidebar-foreground: hsl(210 25% 7.8431%);
+  --sidebar-primary: hsl(207 89% 42%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(211 51% 93%);
+  --sidebar-accent-foreground: hsl(207 89% 42%);
+  --sidebar-border: hsl(205 25% 91%);
+  --sidebar-ring: hsl(207 89% 42%);
+  --font-sans: 'Inter', sans-serif;
+  --font-serif: Georgia, serif;
+  --font-mono: Menlo, monospace;
+  --radius: 0.75rem;
+}
+
+.dark {
+  --background: hsl(0 0% 0%);
+  --foreground: hsl(200 7% 91%);
+  --card: hsl(228 10% 10%);
+  --card-foreground: hsl(0 0% 85%);
+  --popover: hsl(0 0% 0%);
+  --popover-foreground: hsl(200 7% 91%);
+  --primary: hsl(207 89% 53%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(195 15% 95%);
+  --secondary-foreground: hsl(210 25% 7.8431%);
+  --muted: hsl(0 0% 9%);
+  --muted-foreground: hsl(210 3% 46%);
+  --accent: hsl(206 70% 8%);
+  --accent-foreground: hsl(207 89% 53%);
+  --destructive: hsl(4 91% 54%);
+  --destructive-foreground: hsl(0 0% 100%);
+  --border: hsl(210 5% 15%);
+  --input: hsl(208 28% 18%);
+  --ring: hsl(207 89% 53%);
+  --success: hsl(122 39% 49%);
+  --warning: hsl(36 100% 50%);
+  --error: hsl(4 91% 54%);
+  --surface: hsl(228 10% 10%);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+  }
+
+  .material-icons {
+    font-family: 'Material Icons';
+    font-weight: normal;
+    font-style: normal;
+    font-size: 24px;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    word-wrap: normal;
+    direction: ltr;
+    -webkit-font-feature-settings: 'liga';
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer utilities {
+  .text-success {
+    color: hsl(var(--success));
+  }
+  
+  .text-warning {
+    color: hsl(var(--warning));
+  }
+  
+  .text-error {
+    color: hsl(var(--error));
+  }
+  
+  .bg-success {
+    background-color: hsl(var(--success));
+  }
+  
+  .bg-warning {
+    background-color: hsl(var(--warning));
+  }
+  
+  .bg-error {
+    background-color: hsl(var(--error));
+  }
+  
+  .bg-surface {
+    background-color: hsl(var(--surface));
+  }
+  
+  .border-success {
+    border-color: hsl(var(--success));
+  }
+  
+  .border-warning {
+    border-color: hsl(var(--warning));
+  }
+  
+  .border-error {
+    border-color: hsl(var(--error));
+  }
+}
