@@ -47,12 +47,21 @@ export default function Dashboard() {
   const { data: users, isLoading: usersLoading } = useQuery({
     queryKey: ["/api/mobile-users", searchQuery],
     queryFn: async () => {
-      const url = searchQuery 
+      const url = searchQuery
         ? `/api/mobile-users?search=${encodeURIComponent(searchQuery)}`
         : "/api/mobile-users?limit=10";
       const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch users");
-      return response.json();
+      const data = await response.json();
+      return data.users.map((user: any) => ({
+        id: user.userUID || user.uid,
+        email: user.identifier || user.email,
+        name: user.name || user.email.split('@')[0], // Fallback name
+        status: user.status || "active", // Assume active if not specified
+        lastActive: user.signedIn || user.metadata?.lastSignInTime,
+        created: user.created || user.metadata?.creationTime,
+        score: user.score || 0, // Add if available
+      }));
     },
   });
 
@@ -152,12 +161,12 @@ export default function Dashboard() {
 
   return (
     <>
-      <Header 
-        title="Dashboard Overview" 
+      <Header
+        title="Dashboard Overview"
         subtitle="Monitor and manage your mobile application users"
         onAddUser={() => setShowAddUserModal(true)}
       />
-      
+
       <div className="flex-1 overflow-y-auto p-6">
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -277,8 +286,8 @@ export default function Dashboard() {
                       <tr className="border-b border-gray-200">
                         <th className="text-left py-3 px-4 font-medium text-gray-500 text-sm">User</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-500 text-sm">Status</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-500 text-sm">Last Active</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-500 text-sm">Score</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-500 text-sm">Created</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-500 text-sm">Last Sign-In</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-500 text-sm">Actions</th>
                       </tr>
                     </thead>
@@ -302,7 +311,7 @@ export default function Dashboard() {
                               <Skeleton className="h-4 w-20" />
                             </td>
                             <td className="py-4 px-4">
-                              <Skeleton className="h-4 w-12" />
+                              <Skeleton className="h-4 w-20" />
                             </td>
                             <td className="py-4 px-4">
                               <div className="flex space-x-2">
@@ -314,13 +323,13 @@ export default function Dashboard() {
                           </tr>
                         ))
                       ) : (
-                        users?.slice(0, 5)?.map((user: MobileUser) => (
+                        users?.map((user: MobileUser) => (
                           <tr key={user.id}>
                             <td className="py-4 px-4">
                               <div className="flex items-center">
-                                <img 
+                                <img
                                   src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=e5e7eb&color=374151`}
-                                  alt="User Avatar" 
+                                  alt="User Avatar"
                                   className="w-10 h-10 rounded-full object-cover"
                                 />
                                 <div className="ml-3">
@@ -330,29 +339,22 @@ export default function Dashboard() {
                               </div>
                             </td>
                             <td className="py-4 px-4">
-                              <Badge 
+                              <Badge
                                 variant={user.status === "active" ? "default" : "secondary"}
-                                className={user.status === "active" 
-                                  ? "bg-green-100 text-green-800 hover:bg-green-100" 
-                                  : "bg-red-100 text-red-800 hover:bg-red-100"
+                                className={
+                                  user.status === "active"
+                                    ? "bg-green-100 text-green-800 hover:bg-green-100"
+                                    : "bg-red-100 text-red-800 hover:bg-red-100"
                                 }
                               >
                                 {user.status}
                               </Badge>
                             </td>
                             <td className="py-4 px-4 text-sm text-gray-500">
-                              {formatRelativeTime(new Date(user.lastActive))}
+                              {formatRelativeTime(new Date(user.created))}
                             </td>
-                            <td className="py-4 px-4">
-                              <div className="flex items-center">
-                                <span className="text-sm font-medium text-gray-900">{user.score}</span>
-                                <div className="ml-2 w-16 bg-gray-200 rounded-full h-2">
-                                  <div 
-                                    className="bg-success h-2 rounded-full" 
-                                    style={{ width: `${Math.min(user.score, 100)}%` }}
-                                  ></div>
-                                </div>
-                              </div>
+                            <td className="py-4 px-4 text-sm text-gray-500">
+                              {formatRelativeTime(new Date(user.lastActive || user.signedIn))}
                             </td>
                             <td className="py-4 px-4">
                               <div className="flex items-center space-x-2">
@@ -429,7 +431,7 @@ export default function Dashboard() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <Button 
+                  <Button
                     onClick={handleSendNotification}
                     disabled={sendNotificationMutation.isPending}
                     className="w-full bg-primary text-white hover:bg-blue-700"
@@ -460,8 +462,8 @@ export default function Dashboard() {
                     activities?.map((activity: Activity) => (
                       <div key={activity.id} className="flex items-start space-x-3">
                         <div className={`w-2 h-2 rounded-full mt-2 ${
-                          activity.type === "user_action" ? "bg-success" : 
-                          activity.type === "notification" ? "bg-warning" : 
+                          activity.type === "user_action" ? "bg-success" :
+                          activity.type === "notification" ? "bg-warning" :
                           activity.type === "admin_action" ? "bg-error" : "bg-primary"
                         }`}></div>
                         <div>
@@ -480,14 +482,14 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <AddUserModal 
-        open={showAddUserModal} 
-        onOpenChange={setShowAddUserModal} 
+      <AddUserModal
+        open={showAddUserModal}
+        onOpenChange={setShowAddUserModal}
       />
-      
-      <EditUserModal 
-        open={showEditUserModal} 
-        onOpenChange={setShowEditUserModal} 
+
+      <EditUserModal
+        open={showEditUserModal}
+        onOpenChange={setShowEditUserModal}
         user={selectedUser}
       />
     </>

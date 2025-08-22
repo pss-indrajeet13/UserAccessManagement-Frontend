@@ -1,0 +1,668 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mobile App User Management Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'inter': ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: '#1976D2',
+                        secondary: '#424242',
+                        success: '#4CAF50',
+                        warning: '#FF9800',
+                        error: '#F44336',
+                        surface: '#FFFFFF',
+                        background: '#FAFAFA',
+                    }
+                }
+            }
+        };
+    </script>
+    <style>
+        .material-icons { font-family: 'Material Icons'; }
+    </style>
+</head>
+<body class="bg-background font-inter">
+    <!-- @COMPONENT: AppShell [main layout container] -->
+    <div class="flex h-screen bg-background">
+        <!-- @COMPONENT: Sidebar [navigation menu] -->
+        <aside class="w-64 bg-surface shadow-lg flex-shrink-0">
+            <div class="p-6 border-b border-gray-200">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
+                        <span class="material-icons text-white text-xl">apps</span>
+                    </div>
+                    <div>
+                        <h1 class="text-lg font-semibold text-gray-900">MobileAdmin</h1>
+                        <p class="text-sm text-gray-500">User Management</p>
+                    </div>
+                </div>
+            </div>
+            
+            <nav class="mt-6">
+                <div class="px-3">
+                    <div class="space-y-1">
+                        <a href="#" class="bg-blue-50 text-primary group flex items-center px-3 py-2 text-sm font-medium rounded-md" data-event="click:navigateToDashboard">
+                            <span class="material-icons text-primary mr-3">dashboard</span>
+                            Dashboard
+                        </a>
+                        <a href="#" class="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-3 py-2 text-sm font-medium rounded-md" data-event="click:navigateToUsers">
+                            <span class="material-icons text-gray-400 mr-3">people</span>
+                            User Management
+                        </a>
+                        <a href="#" class="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-3 py-2 text-sm font-medium rounded-md" data-event="click:navigateToAccess">
+                            <span class="material-icons text-gray-400 mr-3">security</span>
+                            Access Control
+                        </a>
+                        <a href="#" class="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-3 py-2 text-sm font-medium rounded-md" data-event="click:navigateToNotifications">
+                            <span class="material-icons text-gray-400 mr-3">notifications</span>
+                            Push Notifications
+                        </a>
+                        <a href="#" class="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-3 py-2 text-sm font-medium rounded-md" data-event="click:navigateToReports">
+                            <span class="material-icons text-gray-400 mr-3">assessment</span>
+                            Session Reports
+                        </a>
+                        <a href="#" class="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-3 py-2 text-sm font-medium rounded-md" data-event="click:navigateToAnalytics">
+                            <span class="material-icons text-gray-400 mr-3">analytics</span>
+                            Analytics
+                        </a>
+                    </div>
+                </div>
+            </nav>
+        </aside>
+        <!-- @END_COMPONENT: Sidebar -->
+
+        <!-- @COMPONENT: MainContent [main application area] -->
+        <main class="flex-1 overflow-hidden">
+            <!-- @COMPONENT: TopBar [header with user info and actions] -->
+            <header class="bg-surface shadow-sm border-b border-gray-200">
+                <div class="px-6 py-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h1 class="text-2xl font-semibold text-gray-900">Dashboard Overview</h1>
+                            <p class="text-sm text-gray-500 mt-1">Monitor and manage your mobile application users</p>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <button class="bg-primary text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 transition-colors" data-event="click:showAddUserModal">
+                                <span class="material-icons text-sm mr-2">add</span>
+                                Add User
+                            </button>
+                            <div class="flex items-center space-x-2">
+                                <!-- Admin profile with professional headshot -->
+                                <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=150&h=150" alt="Admin Profile" class="w-8 h-8 rounded-full object-cover"/>
+                                <div class="text-right">
+                                    <p class="text-sm font-medium text-gray-900" data-bind="admin.name">John Smith</p>
+                                    <p class="text-xs text-gray-500">Administrator</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+            <!-- @END_COMPONENT: TopBar -->
+
+            <!-- @COMPONENT: DashboardContent [scrollable content area] -->
+            <div class="flex-1 overflow-y-auto p-6">
+                <!-- @COMPONENT: StatsGrid [key metrics overview] -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <div class="bg-surface rounded-lg shadow-sm p-6 border border-gray-200">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0">
+                                <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                                    <span class="material-icons text-primary text-xl">people</span>
+                                </div>
+                            </div>
+                            <div class="ml-4">
+                                <p class="text-sm font-medium text-gray-500">Total Users</p>
+                                <p class="text-2xl font-semibold text-gray-900" data-bind="stats.totalUsers">2,847</p>
+                                <p class="text-sm text-success">+12% from last month</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-surface rounded-lg shadow-sm p-6 border border-gray-200">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0">
+                                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                                    <span class="material-icons text-success text-xl">check_circle</span>
+                                </div>
+                            </div>
+                            <div class="ml-4">
+                                <p class="text-sm font-medium text-gray-500">Active Users</p>
+                                <p class="text-2xl font-semibold text-gray-900" data-bind="stats.activeUsers">2,156</p>
+                                <p class="text-sm text-success">+8% from last month</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-surface rounded-lg shadow-sm p-6 border border-gray-200">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0">
+                                <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                                    <span class="material-icons text-warning text-xl">schedule</span>
+                                </div>
+                            </div>
+                            <div class="ml-4">
+                                <p class="text-sm font-medium text-gray-500">Daily Sessions</p>
+                                <p class="text-2xl font-semibold text-gray-900" data-bind="stats.dailySessions">18,429</p>
+                                <p class="text-sm text-success">+24% from yesterday</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-surface rounded-lg shadow-sm p-6 border border-gray-200">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0">
+                                <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                                    <span class="material-icons text-purple-600 text-xl">star</span>
+                                </div>
+                            </div>
+                            <div class="ml-4">
+                                <p class="text-sm font-medium text-gray-500">Avg Score</p>
+                                <p class="text-2xl font-semibold text-gray-900" data-bind="stats.avgScore">87.5</p>
+                                <p class="text-sm text-success">+2.1 from last week</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- @END_COMPONENT: StatsGrid -->
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                    <!-- @COMPONENT: UserManagementCard [recent users and quick actions] -->
+                    <div class="lg:col-span-2 bg-surface rounded-lg shadow-sm border border-gray-200">
+                        <div class="p-6">
+                            <div class="flex items-center justify-between mb-6">
+                                <h3 class="text-lg font-semibold text-gray-900">Recent Users</h3>
+                                <div class="flex items-center space-x-2">
+                                    <input type="text" placeholder="Search users..." class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" data-event="input:handleUserSearch"/>
+                                    <button class="text-gray-400 hover:text-gray-600" data-event="click:refreshUserList">
+                                        <span class="material-icons">refresh</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- @STATE: users:array -->
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full">
+                                    <thead>
+                                        <tr class="border-b border-gray-200">
+                                            <th class="text-left py-3 px-4 font-medium text-gray-500 text-sm">User</th>
+                                            <th class="text-left py-3 px-4 font-medium text-gray-500 text-sm">Status</th>
+                                            <th class="text-left py-3 px-4 font-medium text-gray-500 text-sm">Last Active</th>
+                                            <th class="text-left py-3 px-4 font-medium text-gray-500 text-sm">Score</th>
+                                            <th class="text-left py-3 px-4 font-medium text-gray-500 text-sm">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-200">
+                                        <!-- @MAP: users.map(user => ( -->
+                                        <tr data-mock="true">
+                                            <td class="py-4 px-4">
+                                                <div class="flex items-center">
+                                                    <!-- Professional user profile photo -->
+                                                    <img src="https://pixabay.com/get/gdcde4fe34b14df12ed3a078d2b9caff5ebb3fc2e659f79b04c22adb0673e1ad70febd74b86ad3bb3893e64cbc3540950045f934535fb33a4e48a0d632e95312e_1280.jpg" alt="User Avatar" class="w-10 h-10 rounded-full object-cover"/>
+                                                    <div class="ml-3">
+                                                        <p class="text-sm font-medium text-gray-900" data-bind="user.name">Sarah Johnson</p>
+                                                        <p class="text-sm text-gray-500" data-bind="user.email">sarah.j@email.com</p>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="py-4 px-4">
+                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800" data-bind="user.status">Active</span>
+                                            </td>
+                                            <td class="py-4 px-4 text-sm text-gray-500" data-bind="user.lastActive">2 hours ago</td>
+                                            <td class="py-4 px-4">
+                                                <div class="flex items-center">
+                                                    <span class="text-sm font-medium text-gray-900" data-bind="user.score">92</span>
+                                                    <div class="ml-2 w-16 bg-gray-200 rounded-full h-2">
+                                                        <div class="bg-success h-2 rounded-full" style="width: 92%"></div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="py-4 px-4">
+                                                <div class="flex items-center space-x-2">
+                                                    <button class="text-primary hover:text-blue-700" data-event="click:editUser" data-implementation="Opens user edit modal">
+                                                        <span class="material-icons text-sm">edit</span>
+                                                    </button>
+                                                    <button class="text-warning hover:text-orange-700" data-event="click:toggleUserAccess" data-implementation="Toggles user active/inactive status">
+                                                        <span class="material-icons text-sm">block</span>
+                                                    </button>
+                                                    <button class="text-error hover:text-red-700" data-event="click:deleteUser" data-implementation="Shows delete confirmation">
+                                                        <span class="material-icons text-sm">delete</span>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+
+                                        <tr data-mock="true">
+                                            <td class="py-4 px-4">
+                                                <div class="flex items-center">
+                                                    <!-- Professional user profile photo -->
+                                                    <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=150&h=150" alt="User Avatar" class="w-10 h-10 rounded-full object-cover"/>
+                                                    <div class="ml-3">
+                                                        <p class="text-sm font-medium text-gray-900" data-bind="user.name">Michael Chen</p>
+                                                        <p class="text-sm text-gray-500" data-bind="user.email">m.chen@email.com</p>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="py-4 px-4">
+                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800" data-bind="user.status">Inactive</span>
+                                            </td>
+                                            <td class="py-4 px-4 text-sm text-gray-500" data-bind="user.lastActive">2 days ago</td>
+                                            <td class="py-4 px-4">
+                                                <div class="flex items-center">
+                                                    <span class="text-sm font-medium text-gray-900" data-bind="user.score">76</span>
+                                                    <div class="ml-2 w-16 bg-gray-200 rounded-full h-2">
+                                                        <div class="bg-warning h-2 rounded-full" style="width: 76%"></div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="py-4 px-4">
+                                                <div class="flex items-center space-x-2">
+                                                    <button class="text-primary hover:text-blue-700" data-event="click:editUser">
+                                                        <span class="material-icons text-sm">edit</span>
+                                                    </button>
+                                                    <button class="text-success hover:text-green-700" data-event="click:toggleUserAccess">
+                                                        <span class="material-icons text-sm">check_circle</span>
+                                                    </button>
+                                                    <button class="text-error hover:text-red-700" data-event="click:deleteUser">
+                                                        <span class="material-icons text-sm">delete</span>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+
+                                        <tr data-mock="true">
+                                            <td class="py-4 px-4">
+                                                <div class="flex items-center">
+                                                    <!-- Professional user profile photo -->
+                                                    <img src="https://images.unsplash.com/photo-1438761681033-6461ffad8d80?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=150&h=150" alt="User Avatar" class="w-10 h-10 rounded-full object-cover"/>
+                                                    <div class="ml-3">
+                                                        <p class="text-sm font-medium text-gray-900" data-bind="user.name">Emily Rodriguez</p>
+                                                        <p class="text-sm text-gray-500" data-bind="user.email">emily.r@email.com</p>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="py-4 px-4">
+                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800" data-bind="user.status">Active</span>
+                                            </td>
+                                            <td class="py-4 px-4 text-sm text-gray-500" data-bind="user.lastActive">30 min ago</td>
+                                            <td class="py-4 px-4">
+                                                <div class="flex items-center">
+                                                    <span class="text-sm font-medium text-gray-900" data-bind="user.score">88</span>
+                                                    <div class="ml-2 w-16 bg-gray-200 rounded-full h-2">
+                                                        <div class="bg-success h-2 rounded-full" style="width: 88%"></div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="py-4 px-4">
+                                                <div class="flex items-center space-x-2">
+                                                    <button class="text-primary hover:text-blue-700" data-event="click:editUser">
+                                                        <span class="material-icons text-sm">edit</span>
+                                                    </button>
+                                                    <button class="text-warning hover:text-orange-700" data-event="click:toggleUserAccess">
+                                                        <span class="material-icons text-sm">block</span>
+                                                    </button>
+                                                    <button class="text-error hover:text-red-700" data-event="click:deleteUser">
+                                                        <span class="material-icons text-sm">delete</span>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        <!-- @END_MAP )) -->
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="flex items-center justify-between pt-4 border-t border-gray-200">
+                                <p class="text-sm text-gray-500">Showing 1-3 of 2,847 users</p>
+                                <div class="flex items-center space-x-2">
+                                    <button class="px-3 py-1 text-sm text-gray-400 cursor-not-allowed" disabled>Previous</button>
+                                    <button class="px-3 py-1 text-sm bg-primary text-white rounded">1</button>
+                                    <button class="px-3 py-1 text-sm text-gray-600 hover:text-gray-900">2</button>
+                                    <button class="px-3 py-1 text-sm text-gray-600 hover:text-gray-900">3</button>
+                                    <button class="px-3 py-1 text-sm text-primary hover:text-blue-700" data-event="click:nextPage">Next</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- @END_COMPONENT: UserManagementCard -->
+
+                    <!-- @COMPONENT: QuickActionsPanel [notification and access control] -->
+                    <div class="space-y-6">
+                        <!-- Push Notifications Panel -->
+                        <div class="bg-surface rounded-lg shadow-sm border border-gray-200 p-6">
+                            <h3 class="text-lg font-semibold text-gray-900 mb-4">Push Notifications</h3>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Message</label>
+                                    <textarea class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" rows="3" placeholder="Enter notification message..." data-event="input:updateNotificationMessage"></textarea>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Target</label>
+                                    <select class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" data-event="change:selectNotificationTarget">
+                                        <option>All Active Users</option>
+                                        <option>Specific User Group</option>
+                                        <option>Inactive Users</option>
+                                    </select>
+                                </div>
+                                <button class="w-full bg-primary text-white py-2 px-4 rounded-md text-sm font-medium hover:bg-blue-700 transition-colors" data-event="click:sendNotification" data-implementation="Validates form and sends push notification">
+                                    <span class="material-icons text-sm mr-2">send</span>
+                                    Send Notification
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Recent Activity Panel -->
+                        <div class="bg-surface rounded-lg shadow-sm border border-gray-200 p-6">
+                            <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
+                            <div class="space-y-3">
+                                <div class="flex items-start space-x-3" data-mock="true">
+                                    <div class="w-2 h-2 bg-success rounded-full mt-2"></div>
+                                    <div>
+                                        <p class="text-sm text-gray-900" data-bind="activity.description">User John Doe completed Stage 3</p>
+                                        <p class="text-xs text-gray-500" data-bind="activity.timestamp">5 minutes ago</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start space-x-3" data-mock="true">
+                                    <div class="w-2 h-2 bg-warning rounded-full mt-2"></div>
+                                    <div>
+                                        <p class="text-sm text-gray-900" data-bind="activity.description">Push notification sent to 1,247 users</p>
+                                        <p class="text-xs text-gray-500" data-bind="activity.timestamp">12 minutes ago</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start space-x-3" data-mock="true">
+                                    <div class="w-2 h-2 bg-primary rounded-full mt-2"></div>
+                                    <div>
+                                        <p class="text-sm text-gray-900" data-bind="activity.description">New user registration: Alice Smith</p>
+                                        <p class="text-xs text-gray-500" data-bind="activity.timestamp">1 hour ago</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start space-x-3" data-mock="true">
+                                    <div class="w-2 h-2 bg-error rounded-full mt-2"></div>
+                                    <div>
+                                        <p class="text-sm text-gray-900" data-bind="activity.description">User access revoked: Mike Johnson</p>
+                                        <p class="text-xs text-gray-500" data-bind="activity.timestamp">2 hours ago</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- @END_COMPONENT: QuickActionsPanel -->
+                </div>
+
+                <!-- @COMPONENT: AnalyticsSection [charts and session reports] -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Session Analytics Chart -->
+                    <div class="bg-surface rounded-lg shadow-sm border border-gray-200 p-6">
+                        <div class="flex items-center justify-between mb-6">
+                            <h3 class="text-lg font-semibold text-gray-900">Session Analytics</h3>
+                            <select class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent">
+                                <option>Last 7 days</option>
+                                <option>Last 30 days</option>
+                                <option>Last 3 months</option>
+                            </select>
+                        </div>
+                        <!-- Placeholder for chart - in real implementation, use Chart.js or similar -->
+                        <div class="h-64 bg-gray-50 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
+                            <!-- @FUNCTIONALITY: Implement session analytics chart using Chart.js -->
+                            <div class="text-center">
+                                <span class="material-icons text-4xl text-gray-400 mb-2">bar_chart</span>
+                                <p class="text-sm text-gray-500">Session Analytics Chart</p>
+                                <p class="text-xs text-gray-400">Chart.js integration required</p>
+                            </div>
+                        </div>
+                        <div class="mt-4 grid grid-cols-3 gap-4 text-center">
+                            <div>
+                                <p class="text-2xl font-semibold text-gray-900" data-bind="analytics.avgSessionTime">24m</p>
+                                <p class="text-sm text-gray-500">Avg Session</p>
+                            </div>
+                            <div>
+                                <p class="text-2xl font-semibold text-gray-900" data-bind="analytics.completionRate">68%</p>
+                                <p class="text-sm text-gray-500">Completion Rate</p>
+                            </div>
+                            <div>
+                                <p class="text-2xl font-semibold text-gray-900" data-bind="analytics.returnRate">42%</p>
+                                <p class="text-sm text-gray-500">Return Rate</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Score Distribution -->
+                    <div class="bg-surface rounded-lg shadow-sm border border-gray-200 p-6">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-6">Score Distribution</h3>
+                        <div class="space-y-4">
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-medium text-gray-700">90-100 (Excellent)</span>
+                                <div class="flex items-center space-x-2">
+                                    <div class="w-32 bg-gray-200 rounded-full h-2">
+                                        <div class="bg-success h-2 rounded-full" style="width: 35%"></div>
+                                    </div>
+                                    <span class="text-sm text-gray-600 w-12 text-right" data-bind="scoreDistribution.excellent">35%</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-medium text-gray-700">80-89 (Good)</span>
+                                <div class="flex items-center space-x-2">
+                                    <div class="w-32 bg-gray-200 rounded-full h-2">
+                                        <div class="bg-primary h-2 rounded-full" style="width: 28%"></div>
+                                    </div>
+                                    <span class="text-sm text-gray-600 w-12 text-right" data-bind="scoreDistribution.good">28%</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-medium text-gray-700">70-79 (Average)</span>
+                                <div class="flex items-center space-x-2">
+                                    <div class="w-32 bg-gray-200 rounded-full h-2">
+                                        <div class="bg-warning h-2 rounded-full" style="width: 22%"></div>
+                                    </div>
+                                    <span class="text-sm text-gray-600 w-12 text-right" data-bind="scoreDistribution.average">22%</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-medium text-gray-700">60-69 (Below Average)</span>
+                                <div class="flex items-center space-x-2">
+                                    <div class="w-32 bg-gray-200 rounded-full h-2">
+                                        <div class="bg-orange-500 h-2 rounded-full" style="width: 10%"></div>
+                                    </div>
+                                    <span class="text-sm text-gray-600 w-12 text-right" data-bind="scoreDistribution.belowAverage">10%</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-medium text-gray-700">0-59 (Poor)</span>
+                                <div class="flex items-center space-x-2">
+                                    <div class="w-32 bg-gray-200 rounded-full h-2">
+                                        <div class="bg-error h-2 rounded-full" style="width: 5%"></div>
+                                    </div>
+                                    <span class="text-sm text-gray-600 w-12 text-right" data-bind="scoreDistribution.poor">5%</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-6 p-4 bg-blue-50 rounded-lg">
+                            <div class="flex items-center">
+                                <span class="material-icons text-primary mr-2">info</span>
+                                <div>
+                                    <p class="text-sm font-medium text-primary">Score Calculation</p>
+                                    <p class="text-xs text-gray-600 mt-1">Based on completion rate, time efficiency, and user engagement metrics</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- @END_COMPONENT: AnalyticsSection -->
+            </div>
+            <!-- @END_COMPONENT: DashboardContent -->
+        </main>
+        <!-- @END_COMPONENT: MainContent -->
+    </div>
+    <!-- @END_COMPONENT: AppShell -->
+
+    <!-- @COMPONENT: AddUserModal [hidden by default] -->
+    <div id="addUserModal" class="fixed inset-0 z-50 overflow-y-auto hidden" data-implementation="Show/hide based on modal state">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+            <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                    <div class="sm:flex sm:items-start">
+                        <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
+                            <span class="material-icons text-primary">person_add</span>
+                        </div>
+                        <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                            <h3 class="text-lg leading-6 font-medium text-gray-900">Add New User</h3>
+                            <div class="mt-4 space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                                    <input type="text" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Enter full name" data-event="input:updateUserName"/>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+                                    <input type="email" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="Enter email address" data-event="input:updateUserEmail"/>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Initial Status</label>
+                                    <select class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" data-event="change:updateUserStatus">
+                                        <option value="active">Active</option>
+                                        <option value="inactive">Inactive</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Access Level</label>
+                                    <select class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" data-event="change:updateAccessLevel">
+                                        <option value="standard">Standard User</option>
+                                        <option value="premium">Premium User</option>
+                                        <option value="admin">Admin</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                    <button type="button" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary sm:ml-3 sm:w-auto sm:text-sm" data-event="click:createUser" data-implementation="Validates form and creates new user">
+                        Create User
+                    </button>
+                    <button type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm" data-event="click:closeModal">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: AddUserModal -->
+
+    <script>
+        (function() {
+            // TODO: Implement business logic, API calls, and state management
+            
+            // Mock data for demonstration
+            const mockData = {
+                users: [
+                    { id: 1, name: 'Sarah Johnson', email: 'sarah.j@email.com', status: 'active', lastActive: '2 hours ago', score: 92 },
+                    { id: 2, name: 'Michael Chen', email: 'm.chen@email.com', status: 'inactive', lastActive: '2 days ago', score: 76 },
+                    { id: 3, name: 'Emily Rodriguez', email: 'emily.r@email.com', status: 'active', lastActive: '30 min ago', score: 88 }
+                ],
+                stats: {
+                    totalUsers: 2847,
+                    activeUsers: 2156,
+                    dailySessions: 18429,
+                    avgScore: 87.5
+                }
+            };
+
+            // Modal functionality
+            function showModal(modalId) {
+                document.getElementById(modalId).classList.remove('hidden');
+            }
+
+            function hideModal(modalId) {
+                document.getElementById(modalId).classList.add('hidden');
+            }
+
+            // Event listeners for demo interactions
+            document.addEventListener('click', function(e) {
+                if (e.target.closest('[data-event*="showAddUserModal"]')) {
+                    showModal('addUserModal');
+                }
+                if (e.target.closest('[data-event*="closeModal"]')) {
+                    hideModal('addUserModal');
+                }
+                // Close modal on backdrop click
+                if (e.target.classList.contains('bg-opacity-75')) {
+                    hideModal('addUserModal');
+                }
+            });
+
+            // Form validation placeholders
+            function validateEmail(email) {
+                return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+            }
+
+            function validateForm(formData) {
+                // TODO: Implement comprehensive form validation
+                return true;
+            }
+
+            // Notification system placeholder
+            function sendPushNotification(message, target) {
+                // TODO: Implement push notification API integration
+                console.log(`Sending notification: ${message} to ${target}`);
+            }
+
+            // User management functions
+            function createUser(userData) {
+                // TODO: Implement user creation API call
+                console.log('Creating user:', userData);
+            }
+
+            function updateUser(userId, userData) {
+                // TODO: Implement user update API call
+                console.log('Updating user:', userId, userData);
+            }
+
+            function deleteUser(userId) {
+                // TODO: Implement user deletion with confirmation
+                console.log('Deleting user:', userId);
+            }
+
+            function toggleUserAccess(userId) {
+                // TODO: Implement user access toggle API call
+                console.log('Toggling access for user:', userId);
+            }
+
+            // Analytics and reporting functions
+            function generateSessionReport(filters) {
+                // TODO: Implement session report generation
+                console.log('Generating session report with filters:', filters);
+            }
+
+            function calculateUserScore(sessionData) {
+                // TODO: Implement score calculation algorithm
+                console.log('Calculating score for session data:', sessionData);
+                return Math.floor(Math.random() * 100); // Mock score
+            }
+
+            // Search and filtering
+            function filterUsers(searchTerm) {
+                // TODO: Implement user search functionality
+                console.log('Filtering users with term:', searchTerm);
+            }
+
+            // Pagination
+            function loadPage(pageNumber) {
+                // TODO: Implement pagination API call
+                console.log('Loading page:', pageNumber);
+            }
+
+            console.log('Mobile App User Management Dashboard initialized');
+        })();
+    </script>
+</body>
+</html>

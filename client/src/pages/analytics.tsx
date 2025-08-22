@@ -1,3 +1,4 @@
+// C:\PSS\UserAccessManager\client\src\pages\analytics.tsx
 import { useQuery } from "@tanstack/react-query";
 import Header from "@/components/layout/header";
 import { Card, CardContent } from "@/components/ui/card";

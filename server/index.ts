@@ -1,71 +1,61 @@
-import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
+// import express from "express";
+// import pkg from "pg";
+// import dotenv from "dotenv";
+// import router from "./routes"; // Make sure routes/index.ts or routes.ts exists
 
-const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+// dotenv.config();
+// const { Pool } = pkg;
 
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+// const app = express();
+// const PORT = process.env.PORT || 3000;
 
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
+// // Middleware to parse JSON requests
+// app.use(express.json());
 
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
+// // Setup PostgreSQL pool using environment variables or fallback connection string
+// export const pool = new Pool({
+//   connectionString:
+//     process.env.DATABASE_URL ||
+//     `postgres://${process.env.DB_USER}:${process.env.DB_PASSWORD}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`,
+// });
 
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
+// // Test DB connection on startup
+// pool.connect()
+//   .then(client => {
+//     return client.query("SELECT NOW()")
+//       .then(res => {
+//         console.log("✅ Connected to Postgres at", res.rows[0].now);
+//         client.release();
+//       })
+//       .catch(err => {
+//         client.release();
+//         console.error("❌ Error testing database connection:", err);
+//       });
+//   })
+//   .catch(err => {
+//     console.error("❌ Failed to connect to Postgres:", err);
+//   });
 
-      log(logLine);
-    }
-  });
+// // Global error handlers for uncaught exceptions and promise rejections
+// process.on('uncaughtException', (err) => {
+//   console.error('Uncaught Exception:', err);
+//   process.exit(1);
+// });
 
-  next();
-});
+// process.on('unhandledRejection', (reason, promise) => {
+//   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+//   process.exit(1);
+// });
 
-(async () => {
-  const server = await registerRoutes(app);
+// // Basic root route to confirm server is running
+// app.get("/", (req, res) => {
+//   res.send("🚀 Server is running and connected to Postgres!");
+// });
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+// // Use your API routes under /api prefix
+// app.use("/api", router);
 
-    res.status(status).json({ message });
-    throw err;
-  });
-
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
-  }
-
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    log(`serving on port ${port}`);
-  });
-})();
+// // Start the Express server
+// app.listen(PORT, () => {
+//   console.log(`🌐 Server is listening on http://localhost:${PORT}`);
+// });

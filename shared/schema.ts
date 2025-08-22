@@ -1,3 +1,4 @@
+// C:\PSS\UserAccessManager\shared\schema.ts
 import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, boolean, integer, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
@@ -69,8 +70,8 @@ export const insertSessionSchema = createInsertSchema(sessions).pick({
 
 export const insertNotificationSchema = createInsertSchema(notifications).pick({
   message: true,
-  target: true,
-  sentBy: true,
+  target: true
+  // sentBy: true,
 });
 
 export const insertActivitySchema = createInsertSchema(activities).pick({
