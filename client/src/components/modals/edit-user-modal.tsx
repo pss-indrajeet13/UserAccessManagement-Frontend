@@ -42,22 +42,23 @@ export default function EditUserModal({ open, onOpenChange, user }: EditUserModa
   const updateUserMutation = useMutation({
     mutationFn: async (userData: Partial<MobileUser>) => {
       const response = await apiRequest("PUT", `/api/mobile-users/${user?.id}`, userData);
-      return response.json();
+      return response;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/mobile-users"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/activities"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/recent-users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activity"] });
       toast({
         title: "Success",
-        description: "User updated successfully",
+        description: data.message || "User updated successfully",
       });
       onOpenChange(false);
     },
-    onError: () => {
+    onError: (error: any) => {
       toast({
         title: "Error",
-        description: "Failed to update user",
+        description: error.message || "Failed to update user",
         variant: "destructive",
       });
     },

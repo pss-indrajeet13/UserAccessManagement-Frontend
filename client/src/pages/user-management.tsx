@@ -35,32 +35,45 @@ export default function UserManagement() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: users, isLoading } = useQuery({
+  const { data: usersResponse, isLoading } = useQuery({
     queryKey: ["/api/mobile-users", searchQuery],
     queryFn: async () => {
-      const url = searchQuery 
+      const url = searchQuery
         ? `/api/mobile-users?search=${encodeURIComponent(searchQuery)}`
         : "/api/mobile-users";
       const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch users");
-      return response.json();
+      const data = await response.json();
+      return data;
     },
+    refetchInterval: 10000, // Refresh every 10 seconds for live data
+    refetchOnWindowFocus: true,
   });
+
+  const users = usersResponse?.users || [];
 
   const toggleUserStatusMutation = useMutation({
     mutationFn: async ({ userId, newStatus }: { userId: string; newStatus: "active" | "inactive" }) => {
-      const response = await apiRequest("PUT", `/api/mobile-users/${userId}`, {
+      const response = await apiRequest("PATCH", `/api/mobile-users/${userId}/status`, {
         status: newStatus,
       });
-      return response.json();
+      return response;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/mobile-users"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/activities"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/recent-users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activity"] });
       toast({
         title: "Success",
-        description: "User status updated successfully",
+        description: data.message || "User status updated successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update user status",
+        variant: "destructive",
       });
     },
   });
@@ -70,13 +83,21 @@ export default function UserManagement() {
       const response = await apiRequest("DELETE", `/api/mobile-users/${userId}`);
       return response;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/mobile-users"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/activities"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/recent-users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activity"] });
       toast({
         title: "Success",
-        description: "User deleted successfully",
+        description: data.message || "User deleted successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete user",
+        variant: "destructive",
       });
     },
   });
@@ -92,7 +113,9 @@ export default function UserManagement() {
   };
 
   const handleDeleteUser = (user: MobileUser) => {
-    if (confirm(`Are you sure you want to delete user ${user.name}?`)) {
+    const confirmMessage = `⚠️ WARNING: This action cannot be undone!\n\nAre you sure you want to permanently delete user "${user.name}" (${user.email})?\n\nThis will remove all their data from the system.`;
+
+    if (confirm(confirmMessage)) {
       deleteUserMutation.mutate(user.id);
     }
   };
@@ -183,7 +206,7 @@ export default function UserManagement() {
                       </tr>
                     ))
                   ) : (
-                    users?.map((user: MobileUser) => (
+                    users.map((user: MobileUser) => (
                       <tr key={user.id}>
                         <td className="py-4 px-4">
                           <div className="flex items-center">
@@ -278,7 +301,7 @@ export default function UserManagement() {
               </table>
             </div>
 
-            {!isLoading && users?.length === 0 && (
+            {!isLoading && users.length === 0 && (
               <div className="text-center py-8">
                 <span className="material-icons text-4xl text-gray-400 mb-4">people</span>
                 <p className="text-gray-500">No users found</p>
