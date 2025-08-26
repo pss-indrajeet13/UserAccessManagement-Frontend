@@ -1,5 +1,5 @@
 # Frontend Development Dockerfile
-FROM node:18-alpine
+FROM node:20-alpine
 
 # Install curl for health checks
 RUN apk add --no-cache curl
@@ -25,3 +25,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # Default command (can be overridden in docker-compose)
 CMD ["npm", "run", "frontend"]
+
