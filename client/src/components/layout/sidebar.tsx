@@ -14,7 +14,7 @@ export default function Sidebar() {
   const [location] = useLocation();
 
   return (
-    <aside className="w-64 bg-white shadow-lg flex-shrink-0 h-full">
+    <aside className="fixed top-0 left-0 w-64 bg-white shadow-lg h-screen overflow-y-hidden">
       {/* Logo & Title */}
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center space-x-3">
@@ -29,35 +29,33 @@ export default function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="mt-6">
-        <div className="px-3">
-          <div className="space-y-1">
-            {navigationItems.map((item) => {
-              const isActive = location === item.path;
-              return (
-                <Link
-                  key={item.path}
-                  href={item.path}
+      <nav className="mt-6 px-3">
+        <div className="space-y-1">
+          {navigationItems.map((item) => {
+            const isActive = location === item.path;
+            return (
+              <Link
+                key={item.path}
+                href={item.path}
+                className={cn(
+                  "group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                  isActive
+                    ? "bg-blue-50 text-blue-600"
+                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                )}
+              >
+                <span
                   className={cn(
-                    "group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
-                    isActive
-                      ? "bg-blue-50 text-blue-600"
-                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                    "material-icons mr-3",
+                    isActive ? "text-blue-600" : "text-gray-400"
                   )}
                 >
-                  <span
-                    className={cn(
-                      "material-icons mr-3",
-                      isActive ? "text-blue-600" : "text-gray-400"
-                    )}
-                  >
-                    {item.icon}
-                  </span>
-                  {item.label}
-                </Link>
-              );
-            })}
-          </div>
+                  {item.icon}
+                </span>
+                {item.label}
+              </Link>
+            );
+          })}
         </div>
       </nav>
     </aside>

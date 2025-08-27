@@ -1,3 +1,4 @@
+// C:\PSS\UserAccessManager\client\src\components\layout\header.tsx
 import { Button } from "@/components/ui/button";
 
 interface HeaderProps {
@@ -29,7 +30,7 @@ export default function Header({ title, subtitle, onAddUser }: HeaderProps) {
                 className="w-8 h-8 rounded-full object-cover"
               />
               <div className="text-right">
-                <p className="text-sm font-medium text-gray-900">John Smith</p>
+                <p className="text-sm font-medium text-gray-900">Admin Name</p>
                 <p className="text-xs text-gray-500">Administrator</p>
               </div>
             </div>

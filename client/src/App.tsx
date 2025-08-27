@@ -27,9 +27,9 @@ function PrivateRoute({ component: Component }: { component: React.FC }) {
   if (!user) return <Redirect to="/login" />;
 
   return (
-    <div className="flex h-screen">
+    <div className="h-screen">
       <Sidebar />
-      <main className="flex-1 overflow-auto p-6">
+      <main className="absolute top-0 left-64 right-0 bottom-0 overflow-auto">
         <Component />
       </main>
     </div>
