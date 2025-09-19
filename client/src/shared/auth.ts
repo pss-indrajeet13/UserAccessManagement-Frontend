@@ -1,76 +1,32 @@
-// import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
-// import { auth, db } from "@/shared/firebase"; // Update path if needed
-// import { doc, getDoc, setDoc } from "firebase/firestore";
+import { getAuth, signInWithEmailAndPassword, User } from "firebase/auth";
+import { app } from "@/firebase";
+import { getFirestore, doc, getDoc } from "firebase/firestore";
 
-// export async function registerAdmin(email: string, password: string, profile: any = {}) {
-//   // Create a new admin user in Firebase Auth
-//   const { user } = await createUserWithEmailAndPassword(auth, email, password);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-//   // Save additional admin profile data into Firestore (e.g., role: admin)
-//   await setDoc(doc(db, "admins", user.uid), {
-//     email: user.email,
-//     role: "admin",
-//     ...profile,
-//     createdAt: Date.now(),
-//   });
-
-//   return user;
-// }
-
-// export async function loginAdmin(email: string, password: string) {
-//   // Sign in the user with Firebase Auth
-//   const { user } = await signInWithEmailAndPassword(auth, email, password);
-
-//   // Check if user is an admin by querying Firestore
-//   const adminDoc = await getDoc(doc(db, "admins", user.uid));
-//   if (!adminDoc.exists()) {
-//     throw new Error("Access denied: User is not an admin");
-//   }
-
-//   // Return user info if admin
-//   return user;
-// }
-
-// auth.ts (no firebase check, just static login)
-// auth.ts
-
-
-// C:\PSS\UserAccessManager\shared\auth.ts
-export async function loginAdmin(email: string, password: string) {
-  const ADMIN_EMAIL = "admin@gmail.com";
-  const ADMIN_PASS = "admin123";
-
-  return new Promise((resolve, reject) => {
-    if (email === ADMIN_EMAIL && password === ADMIN_PASS) {
-      console.log("Login successful with static credentials");
-      resolve({ email: ADMIN_EMAIL });
-    } else {
-      console.log("Login failed, invalid credentials");
-      reject(new Error("Invalid email or password"));
-    }
-  });
+export interface AdminUser {
+  uid: string;
+  email: string | null;
+  token: string;
+  claims?: Record<string, any>;
 }
 
-import { useState } from "react";
+export async function loginAdmin(email: string, password: string): Promise<AdminUser> {
+  const cred = await signInWithEmailAndPassword(auth, email, password);
+  const user = cred.user;
 
-export function useAuth() {
-  const [user, setUser] = useState<any>(null);
+  // Fetch the user's document from Firestore to check their role.
+  const userDocRef = doc(db, "users", user.uid);
+  const userDocSnap = await getDoc(userDocRef);
 
-  const login = async (email: string, password: string) => {
-    try {
-      const userData = await loginAdmin(email, password);
-      setUser(userData);
-      console.log("User set in state:", userData);
-    } catch (err) {
-      setUser(null);
-      throw err;
-    }
-  };
+  // Check if the document exists and the user has the 'admin' role.
+  if (!userDocSnap.exists() || userDocSnap.data()?.role !== 'admin') {
+    // If the user is not an admin, sign them out.
+    await auth.signOut();
+    throw new Error("Access denied: You do not have administrator privileges.");
+  }
 
-  const logout = () => {
-    setUser(null);
-    console.log("User logged out");
-  };
-
-  return { user, login, logout };
+  const token = await user.getIdToken(true);
+  return { uid: user.uid, email: user.email, token, claims: {} };
 }

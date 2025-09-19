@@ -60,30 +60,19 @@ export default defineConfig({
   },
   root: path.resolve(__dirname, "client"),
   server: {
-    host: '0.0.0.0', // Allow external connections
+    host: '0.0.0.0',
     port: 5173,
-    open: false, // Disable auto-open in container environment
-    allowedHosts: [
-      'localhost',
-      '127.0.0.1',
-      'admin.fertiwell.info'  // Add your domain here
-    ],
+    open: false,
     proxy: {
       "/api": {
-        target: "https://adminapi.fertiwell.info", // Updated to use your backend domain
+        target: process.env.VITE_PROXY_TARGET || "http://localhost:5000",
         changeOrigin: true,
-        secure: false, // For HTTP (non-SSL)
-        rewrite: (path) => path, // Keep the /api prefix
-        configure: (proxy, options) => {
-          proxy.on('error', (err, req, res) => {
-            console.log('proxy error', err);
-          });
-          proxy.on('proxyReq', (proxyReq, req, res) => {
-            console.log('Sending Request to the Target:', req.method, req.url);
-          });
-          proxy.on('proxyRes', (proxyRes, req, res) => {
-            console.log('Received Response from the Target:', proxyRes.statusCode, req.url);
-          });
+        secure: false,
+        rewrite: (path) => path,
+        configure: (proxy) => {
+          proxy.on('error', (err) => console.log('proxy error', err));
+          proxy.on('proxyReq', (proxyReq, req) => console.log('Proxying:', req.method, req.url));
+          proxy.on('proxyRes', (proxyRes, req) => console.log('Proxy response:', proxyRes.statusCode, req.url));
         }
       },
     },
