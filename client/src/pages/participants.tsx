@@ -174,6 +174,12 @@ const Participants: React.FC = () => {
             <Header title="Participants" subtitle="Manage participants and access individual insights" />
 
             <main className="p-6 mx-auto max-w-7xl">
+                <div className="mb-6">
+                    <h1 className="text-2xl font-bold text-[#125566]">Participants</h1>
+                    <p className="text-base text-black mt-1">
+                        Manage participants and access individual insights
+                    </p>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                     {cards.map((stat) => (
                         <div
