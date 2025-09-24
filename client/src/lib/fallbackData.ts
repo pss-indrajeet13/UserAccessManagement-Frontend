@@ -1,5 +1,56 @@
 // Emergency fallback data when Firebase is not accessible
 
+export type FallbackUser = {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  status: "active" | "inactive" | "suspended";
+  accessLevel: "standard" | "premium" | "admin";
+  currentStage: number;
+  totalStages: number;
+  progress: number;
+  createdAt: Date;
+  lastActive: Date;
+  location?: string;
+  deviceInfo?: string;
+  score: number;
+};
+
+const CLIENT_USERS_KEY = "clientAddedUsers";
+const CLIENT_NOTIFICATIONS_KEY = "clientNotifications";
+
+function reviveDates<T extends Record<string, any>>(obj: T): T {
+  const out: any = { ...obj };
+  for (const k of Object.keys(out)) {
+    const v = out[k];
+    if (typeof v === "string" && /\d{4}-\d{2}-\d{2}T/.test(v)) {
+      const d = new Date(v);
+      if (!isNaN(d.getTime())) out[k] = d;
+    }
+  }
+  return out;
+}
+
+function loadClientArray<T>(key: string): T[] {
+  if (typeof localStorage === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const arr = JSON.parse(raw) as any[];
+    return arr.map((x) => reviveDates(x));
+  } catch {
+    return [];
+  }
+}
+
+function saveClientArray<T>(key: string, arr: T[]) {
+  if (typeof localStorage === "undefined") return;
+  localStorage.setItem(key, JSON.stringify(arr));
+}
+
+let clientAddedUsers: FallbackUser[] = loadClientArray<FallbackUser>(CLIENT_USERS_KEY);
+
 export const fallbackUsers = [
   {
     id: "fallback-1",
@@ -205,6 +256,62 @@ export const fallbackActivities = [
     icon: "block"
   }
 ];
+
+export function getAllUsers(): FallbackUser[] {
+  return [...fallbackUsers, ...clientAddedUsers];
+}
+
+export function addClientUser(user: {
+  name: string;
+  email: string;
+  status?: "active" | "inactive" | "suspended";
+  accessLevel?: "standard" | "premium" | "admin";
+}): FallbackUser {
+  const now = new Date();
+  const newUser: FallbackUser = {
+    id: `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    name: user.name,
+    email: user.email,
+    status: user.status ?? "active",
+    accessLevel: user.accessLevel ?? "standard",
+    currentStage: 1,
+    totalStages: 10,
+    progress: 0,
+    createdAt: now,
+    lastActive: now,
+    score: 0,
+  };
+  clientAddedUsers = [newUser, ...clientAddedUsers];
+  saveClientArray(CLIENT_USERS_KEY, clientAddedUsers);
+  return newUser;
+}
+
+export type LocalNotification = {
+  id: string;
+  message: string;
+  target: string;
+  sentAt: Date;
+  sentBy?: string;
+};
+
+let clientNotifications: LocalNotification[] = loadClientArray<LocalNotification>(CLIENT_NOTIFICATIONS_KEY);
+
+export function addLocalNotification(message: string, target: string, sentBy = "local-admin") {
+  const n: LocalNotification = {
+    id: `local-notif-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    message,
+    target,
+    sentAt: new Date(),
+    sentBy,
+  };
+  clientNotifications = [n, ...clientNotifications];
+  saveClientArray(CLIENT_NOTIFICATIONS_KEY, clientNotifications);
+  return n;
+}
+
+export function getLocalNotifications(): LocalNotification[] {
+  return clientNotifications;
+}
 
 export const getFallbackStats = () => {
   const totalUsers = fallbackUsers.length;

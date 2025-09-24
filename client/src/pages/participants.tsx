@@ -223,7 +223,7 @@ const Participants: React.FC = () => {
 
                 <div className="bg-white rounded-xl shadow-md overflow-x-auto">
                     <div className="px-6 py-4 border-b">
-                        <h2 className="text-lg font-semibold">Participants List</h2>
+                        <h2 className="text-lg font-semibold" style={{ color: '#125566' }}>Participants List</h2>
                         <p className="text-gray-500 text-sm">
                             Overview of all Participants
                         </p>
@@ -231,21 +231,20 @@ const Participants: React.FC = () => {
 
                     <table className="min-w-full">
                         <thead>
-                            <tr className="text-gray-700 text-left">
-                                <th className="py-3 px-6">Participant Name</th>
-                                <th className="py-3 px-6">Age</th>
-                                <th className="py-3 px-6">Chapter No.</th>
-                                <th className="py-3 px-6">Progress</th>
-                                <th className="py-3 px-6">Last Active</th>
-                                <th className="py-3 px-6">Status</th>
-                                <th className="py-3 px-6">Profile</th>
+                            <tr style={{ backgroundColor: '#125566', color: 'white' }}>
+                                <th className="py-3 px-6 text-left">Participant Name</th>
+                                <th className="py-3 px-6 text-left">Chapter No.</th>
+                                <th className="py-3 px-6 text-left">Progress</th>
+                                <th className="py-3 px-6 text-left">Last Active</th>
+                                <th className="py-3 px-6 text-left">Status</th>
+                                <th className="py-3 px-6 text-left">Profile</th>
                             </tr>
                         </thead>
 
                         <tbody>
                             {loading && (
                                 <tr>
-                                    <td colSpan={7} className="py-12 text-center text-gray-500">
+                                    <td colSpan={6} className="py-12 text-center text-gray-500">
                                         Loading...
                                     </td>
                                 </tr>
@@ -261,7 +260,6 @@ const Participants: React.FC = () => {
                                     return (
                                         <tr key={u.uid} className="border-t hover:bg-gray-50 transition">
                                             <td className="py-2 px-6">{getName(u) || "Unknown"}</td>
-                                            <td className="py-2 px-6">{u.profile?.age || "-"}</td>
                                             <td className="py-2 px-6">
                                                 <div className="flex flex-col items-start">
                                                     <span>{chapterIndex}</span>
@@ -287,7 +285,7 @@ const Participants: React.FC = () => {
 
                             {!loading && filtered.length === 0 && (
                                 <tr>
-                                    <td colSpan={7} className="py-12 text-center text-gray-500">
+                                    <td colSpan={6} className="py-12 text-center text-gray-500">
                                         No participants found.
                                     </td>
                                 </tr>

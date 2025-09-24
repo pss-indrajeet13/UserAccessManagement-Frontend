@@ -1,3 +1,4 @@
+// client/src/pages/login.tsx
 import React, { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useLocation } from "wouter";

@@ -157,6 +157,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
+import { addClientUser, addLocalNotification } from "@/lib/fallbackData";
+import { useToast } from "@/hooks/use-toast";
 
 interface InsertMobileUser {
   name: string;
@@ -179,18 +181,30 @@ export default function AddUserModal({ open, onOpenChange }: AddUserModalProps) 
   });
 
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   // React Query mutation
   const createUserMutation: UseMutationResult<any, any, InsertMobileUser, unknown> = useMutation({
     mutationFn: (userData: InsertMobileUser) => apiRequest("POST", "/api/mobile-users", userData),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/mobile-users"] });
+      addLocalNotification(`New user ${variables.name} created`, "all_active");
+      toast({ title: "Success", description: "User created successfully" });
       onOpenChange(false);
       setFormData({ name: "", email: "", status: "active", accessLevel: "standard" });
-      alert("User created successfully!");
     },
-    onError: (err: any) => {
-      alert("Failed to create user: " + (err.message || ""));
+    onError: (_err, variables) => {
+      const created = addClientUser({
+        name: variables.name,
+        email: variables.email,
+        status: variables.status,
+        accessLevel: variables.accessLevel,
+      });
+      addLocalNotification(`New user ${created.name} created`, "all_active");
+      queryClient.invalidateQueries({ queryKey: ["/api/mobile-users"] });
+      toast({ title: "Created locally", description: "User stored locally (no API)." });
+      onOpenChange(false);
+      setFormData({ name: "", email: "", status: "active", accessLevel: "standard" });
     },
   });
 

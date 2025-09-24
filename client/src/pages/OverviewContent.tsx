@@ -1,3 +1,4 @@
+// src/pages/OverviewContent.tsx
 import React, { useState, useEffect } from 'react';
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
@@ -245,11 +246,12 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
   // Only render the full page if user data is available
   return (
     <>
-
-      <div className="bg-white rounded-xl shadow-md p-5 mb-6">
-        <h2 className="text-xl font-semibold" style={{ color: '#125566' }}>Segment Access Specefier</h2>
-        <p className="text-gray-500 mb-4">Provide or revoke access to video segments.</p>
-        <div className="flex items-center space-x-6">
+      <div className="bg-white rounded-xl shadow-md mb-6">
+        <div className="p-5 pb-2 border-b" style={{ borderColor: "#125566" }}>
+          <h2 className="text-xl font-semibold" style={{ color: '#125566' }}>Segment Access Specefier</h2>
+          <p className="text-gray-500 mb-4">Provide or revoke access to video segments.</p>
+        </div>
+        <div className="p-5 flex items-center space-x-6">
           <div className="flex items-center space-x-2">
             <input
               type="checkbox"
@@ -295,10 +297,12 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
       </div>
 
       <div className="grid md:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white rounded-xl shadow-md p-5">
-          <h2 className="font-semibold mb-2">Activity Heat-map (28 days)</h2>
-          <p className="text-gray-500 mb-3">Daily completion status</p>
-          <div className="grid grid-cols-7 gap-2">
+        <div className="bg-white rounded-xl shadow-md">
+          <div className="p-5 pb-2 border-b" style={{ borderColor: "#125566" }}>
+            <h2 className="font-semibold" style={{ color: '#125566' }}>Activity Heat-map (28 days)</h2>
+            <p className="text-gray-500 mb-3">Daily completion status</p>
+          </div>
+          <div className="p-5 grid grid-cols-7 gap-2">
             {[...Array(28)].map((_, i) => (
               <div
                 key={i}
@@ -310,10 +314,12 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-md p-5">
-          <h2 className="font-semibold mb-2">Stress Level Trends</h2>
-          <p className="text-gray-500 mb-3">Weekly stress level progression</p>
-          <div className="flex gap-4 items-end h-40">
+        <div className="bg-white rounded-xl shadow-md">
+          <div className="p-5 pb-2 border-b" style={{ borderColor: "#125566" }}>
+            <h2 className="font-semibold" style={{ color: '#125566' }}>Stress Level Trends</h2>
+            <p className="text-gray-500 mb-3">Weekly stress level progression</p>
+          </div>
+          <div className="p-5 flex gap-4 items-end h-40">
             {[3, 3.5, 0, 0].map((val, i) => (
               <div key={i} className="flex flex-col items-center flex-1">
                 <div
@@ -327,10 +333,12 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-md p-5">
-        <h2 className="font-semibold mb-2">Program Activity</h2>
-        <p className="text-gray-500 mb-3">Daily sessions completion status</p>
-        <table className="min-w-full text-sm">
+      <div className="bg-white rounded-xl shadow-md">
+        <div className="p-5 pb-2 border-b" style={{ borderColor: "#125566" }}>
+          <h2 className="font-semibold" style={{ color: '#125566' }}>Program Activity</h2>
+          <p className="text-gray-500 mb-3">Daily sessions completion status</p>
+        </div>
+        <table className="min-w-full text-sm p-5">
           <thead>
             <tr className="text-gray-700">
               <th className="px-3 py-2 text-left">Day</th>

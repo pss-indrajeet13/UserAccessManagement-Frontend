@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { Notification } from "@shared/schema";
+import { getFallbackStats, getLocalNotifications, addLocalNotification } from "@/lib/fallbackData";
 
 function formatRelativeTime(date: Date): string {
   const now = new Date();
@@ -33,35 +34,45 @@ export default function Notifications() {
 
   const { data: notifications, isLoading } = useQuery({
     queryKey: ["/api/notifications"],
+    queryFn: async () => {
+      try {
+        const res = await fetch("/api/notifications", { credentials: "include" });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return await res.json();
+      } catch {
+        return getLocalNotifications();
+      }
+    },
   });
 
   const { data: stats } = useQuery({
     queryKey: ["/api/stats"],
+    queryFn: async () => {
+      try {
+        const res = await fetch("/api/stats", { credentials: "include" });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return await res.json();
+      } catch {
+        return getFallbackStats();
+      }
+    },
   });
 
   const sendNotificationMutation = useMutation({
     mutationFn: async ({ message, target }: { message: string; target: string }) => {
-      const response = await apiRequest("POST", "/api/notifications", {
-        message,
-        target,
-      });
-      return response.json();
+      return await apiRequest("POST", "/api/notifications", { message, target });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       queryClient.invalidateQueries({ queryKey: ["/api/activities"] });
-      toast({
-        title: "Success",
-        description: "Notification sent successfully",
-      });
+      toast({ title: "Success", description: "Notification sent successfully" });
       setNotificationMessage("");
     },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to send notification",
-        variant: "destructive",
-      });
+    onError: (_err, variables) => {
+      const created = addLocalNotification(variables.message, variables.target);
+      queryClient.setQueryData(["/api/notifications"], (prev: any) => [created, ...(prev || [])]);
+      toast({ title: "Queued locally", description: "Notification stored locally (no API)." });
+      setNotificationMessage("");
     },
   });
 
@@ -125,7 +136,7 @@ export default function Notifications() {
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-500">Total Sent</p>
                   <p className="text-2xl font-semibold text-gray-900">
-                    {notifications?.length || 0}
+                    {(notifications as any)?.length || 0}
                   </p>
                 </div>
               </div>
@@ -259,14 +270,14 @@ export default function Notifications() {
                       <Skeleton className="h-3 w-24" />
                     </div>
                   ))
-                ) : notifications?.length === 0 ? (
+                ) : (notifications as any)?.length === 0 ? (
                   <div className="text-center py-8">
                     <span className="material-icons text-4xl text-gray-400 mb-4">notifications_off</span>
                     <p className="text-gray-500">No notifications sent yet</p>
                     <p className="text-sm text-gray-400">Send your first notification to get started</p>
                   </div>
                 ) : (
-                  notifications?.map((notification: Notification) => (
+                  (notifications as any)?.map((notification: any) => (
                     <div key={notification.id} className="p-4 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
                       <div className="flex items-start justify-between mb-2">
                         <span className="text-sm font-medium text-gray-900">
