@@ -8,7 +8,7 @@ import ParticipantProfileTabs from "./ParticipantProfileTabs";
 import OverviewContent from "./OverviewContent";
 import JournalsContent from "./JournalsContent";
 import PersonalDetailsContent from "./PersonalDetailsContent";
-import ProfileHeader from "@/components/ProfileHeader";
+import ProfileHeader from "@/pages/ProfileHeader";
 
 // ✅ Reusable Confirmation Modal
 function ConfirmModal({
@@ -119,7 +119,6 @@ const ParticipantProfile = () => {
       <div className="p-6">
         <ProfileHeader
           user={user}
-          onDeactivate={() => { setModalType("deactivate"); setModalOpen(true); }}
           onDelete={() => { setModalType("delete"); setModalOpen(true); }}
           onChat={() => {}}
         />

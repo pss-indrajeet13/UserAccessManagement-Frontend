@@ -138,33 +138,33 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
     fetchActivityFlags();
   }, [firebase, user?.uid]);
 
-  const handleConfirm = async () => {
-    if (!user?.uid || !modalType) return;
-    setLoading(true);
+  // const handleConfirm = async () => {
+  //   if (!user?.uid || !modalType) return;
+  //   setLoading(true);
 
-    try {
-      const url = modalType === "deactivate" ? "/api/deactivate-user" : "/api/delete-user";
-      const method = modalType === "deactivate" ? "POST" : "DELETE";
+  //   try {
+  //     const url = modalType === "deactivate" ? "/api/deactivate-user" : "/api/delete-user";
+  //     const method = modalType === "deactivate" ? "POST" : "DELETE";
 
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid: user.uid }),
-      });
+  //     const res = await fetch(url, {
+  //       method,
+  //       headers: { "Content-Type": "application/json" },
+  //       body: JSON.stringify({ uid: user.uid }),
+  //     });
 
-      const data = await res.json();
-      console.log(data.message || "Action completed");
+  //     const data = await res.json();
+  //     console.log(data.message || "Action completed");
 
-      if (modalType === "delete") {
-        window.location.href = "/participants";
-      }
-    } catch (error) {
-      console.error("Something went wrong.", error);
-    } finally {
-      setLoading(false);
-      setModalOpen(false);
-    }
-  };
+  //     if (modalType === "delete") {
+  //       window.location.href = "/participants";
+  //     }
+  //   } catch (error) {
+  //     console.error("Something went wrong.", error);
+  //   } finally {
+  //     setLoading(false);
+  //     setModalOpen(false);
+  //   }
+  // };
 
   const handleUpdateAccess = async () => {
     if (!user?.uid || !firebase) {
@@ -370,7 +370,7 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
         </table>
       </div>
 
-      <ConfirmModal
+      {/* <ConfirmModal
         open={modalOpen}
         title={
           modalType === "delete"
@@ -385,9 +385,9 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
         confirmLabel={modalType === "delete" ? "Delete" : "Deactivate"}
         danger={modalType === "delete"}
         onCancel={() => setModalOpen(false)}
-        onConfirm={handleConfirm}
+        // onConfirm={handleConfirm}
         loading={loading}
-      />
+      /> */}
     </>
   );
 };

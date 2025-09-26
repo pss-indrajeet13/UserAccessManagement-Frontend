@@ -1,6 +1,6 @@
 // C:\PSS\UserAccessManager\client\src\pages\ParticipantProfileTabs.tsx
 import { FaUser, FaBook, FaRegFileAlt, FaChartBar, FaCalendarAlt } from "react-icons/fa";
-import { useRoute } from "wouter";
+import { useLocation } from "wouter";
 
 // Define the structure for each navigation item
 const navItems = [
@@ -22,7 +22,7 @@ const navItems = [
   {
     label: "Day (0) Demographics",
     icon: <FaCalendarAlt />,
-    path: "/participants/:uid/demographics/day-6",
+    path: "/participants/:uid/demographics/day-0",
   },
   {
     label: "Day (13) Demographics",
@@ -36,45 +36,48 @@ const navItems = [
   },
 ];
 
-function ParticipantProfileTabs() {
-  // Correctly destructure useRoute to get the match object
-  const [isMatch, matchParams] = useRoute("/participants/:uid");
-  const [isJournalMatch, journalParams] = useRoute("/participants/:uid/journals");
-  const [isPersonalMatch, personalParams] = useRoute("/participants/:uid/personal");
-  const [isDay6Match, day6Params] = useRoute("/participants/:uid/demographics/day-6");
-  const [isDay13Match, day13Params] = useRoute("/participants/:uid/demographics/day-13");
-  const [isDay28Match, day28Params] = useRoute("/participants/:uid/demographics/day-28");
+// Helper function to extract UID from the current URL
+const getUidFromPath = (path: string) => {
+  const parts = path.split('/');
+  return parts.length > 2 && parts[2] !== '' ? parts[2] : null;
+};
 
-  // Get the UID from any of the matching routes
-  const uid = matchParams?.uid || journalParams?.uid || personalParams?.uid || day6Params?.uid || day13Params?.uid || day28Params?.uid;
+function ParticipantProfileTabs() {
+  const [location] = useLocation();
+  const uid = getUidFromPath(location);
 
   return (
     <div className="bg-white border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex space-x-4 overflow-x-auto">
-          {navItems.map((item) => (
-            <a
-              key={item.path}
-              href={item.path.replace(":uid", uid || "")}
-              className={`
-                flex items-center gap-2 py-4 px-1 text-sm font-medium
-                ${
-                // Check for a match with a specific boolean
-                (item.path === "/participants/:uid" && isMatch) ||
-                  (item.path === "/participants/:uid/journals" && isJournalMatch) ||
-                  (item.path === "/participants/:uid/personal" && isPersonalMatch) ||
-                  (item.path === "/participants/:uid/demographics/day-0" && isDay6Match) ||
-                  (item.path === "/participants/:uid/demographics/day-13" && isDay13Match) ||
-                  (item.path === "/participants/:uid/demographics/day-28" && isDay28Match)
-                  ? "border-b-2 border-teal-500 text-teal-600"
-                  : "text-gray-500 hover:text-gray-700 hover:border-b-2 hover:border-gray-300"
-                }
-              `}
-            >
-              {item.icon}
-              <span>{item.label}</span>
-            </a>
-          ))}
+          {navItems.map((item) => {
+            // Determine the href based on if a UID exists
+            const href = uid ? item.path.replace(":uid", uid) : "#";
+            
+            // Generate the full path for comparison
+            const fullPath = item.path.replace(":uid", uid || "");
+
+            // This is the key fix: check for exact match or sub-path and handle the 'Overview' case
+            const isActive = location === fullPath || (fullPath !== `/participants/${uid}` && location.startsWith(fullPath));
+
+            return (
+              <a
+                key={item.path}
+                href={href}
+                className={`
+                  flex items-center gap-2 py-4 px-1 text-sm font-medium
+                  ${
+                    isActive
+                      ? "border-b-2 border-teal-500 text-teal-600"
+                      : "text-gray-500 hover:text-gray-700 hover:border-b-2 hover:border-gray-300"
+                  }
+                `}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </a>
+            );
+          })}
         </div>
       </div>
     </div>

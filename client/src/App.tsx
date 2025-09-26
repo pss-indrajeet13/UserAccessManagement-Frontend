@@ -1,37 +1,39 @@
 import { Switch, Route, Redirect } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { queryClient } from "./lib/queryClient";
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "./components/ui/toaster";
+import { TooltipProvider } from "./components/ui/tooltip";
 
-import Sidebar from "@/components/layout/sidebar";
+import Sidebar from "./components/layout/sidebar";
 
 // Pages
-import Login from "@/pages/login";
-import Dashboard from "@/pages/dashboard";
-import UserManagement from "@/pages/user-management";
-import AccessControl from "@/pages/access-control";
-import Notifications from "@/pages/notifications";
-import Reports from "@/pages/reports";
-import Chapters from "@/pages/chapters";
-import Profile from "@/pages/profile";
-import Participants from "@/pages/participants";
-import Calendar from "@/pages/calendar";
-import NotFound from "@/pages/not-found";
-import ParticipantProfile from "@/pages/ParticipantProfile";
-import JournalsContent from "@/pages/JournalsContent";
-import PersonalDetailsContent from "@/pages/PersonalDetailsContent";
-import OverviewContent from "@/pages/OverviewContent";
-
+import Login from "./pages/login";
+import Dashboard from "./pages/dashboard";
+import UserManagement from "./pages/user-management";
+import AccessControl from "./pages/access-control";
+import Notifications from "./pages/notifications";
+import Reports from "./pages/reports";
+import Chapters from "./pages/chapters";
+import Profile from "./pages/profile";
+import Participants from "./pages/participants";
+import Calendar from "./pages/calendar";
+import NotFound from "./pages/not-found";
+import ParticipantProfile from "./pages/ParticipantProfile";
+import JournalsContent from "./pages/JournalsContent";
+import PersonalDetailsContent from "./pages/PersonalDetailsContent";
+import OverviewContent from "./pages/OverviewContent";
+import Demo0 from './pages/demographics/demo_0.tsx';
 
 // Auth context
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { query } from "firebase/firestore";
+import { queryClient } from "./lib/queryClient.ts";
 
 // 🔐 PrivateRoute wrapper
-function PrivateRoute({ component: Component }: { component: React.FC }) {
-  const { user, isLoading } = useAuth(); // Destructure isLoading from the auth context
+// This component is now modified to correctly accept and pass down any props
+// from the wouter Route component.
+function PrivateRoute({ component: Component, ...rest }: { component: React.FC<any> }) {
+  const { user, isLoading } = useAuth();
 
-  // Check if the auth state is still loading
   if (isLoading) {
     return <div>Loading...</div>; // Or a spinner/loading component
   }
@@ -42,7 +44,11 @@ function PrivateRoute({ component: Component }: { component: React.FC }) {
     <div className="h-screen">
       <Sidebar />
       <main className="absolute top-0 left-64 right-0 bottom-0 overflow-auto">
-        <Component />
+        {/*
+          The component is rendered here, and all the rest of the props
+          (including the params from the route) are passed down.
+        */}
+        <Component {...rest} />
       </main>
     </div>
   );
@@ -73,10 +79,19 @@ function Router() {
         <Route path="/participants" component={() => <PrivateRoute component={Participants} />} />
         <Route path="/calendar" component={() => <PrivateRoute component={Calendar} />} />
         <Route path="/profile" component={() => <PrivateRoute component={Profile} />} />
+        <Route path="/participants/:uid/demographics/day-0" component={() => <PrivateRoute component={Demo0} />} />
+        <Route path="/participants/:uid/journals" component={() => <PrivateRoute component={JournalsContent} />} />
+        <Route path="/participants/:uid/personal-details" component={() => <PrivateRoute component={PersonalDetailsContent} />} />
+        <Route path="/participants/:uid/overview" component={() => <PrivateRoute component={OverviewContent} />} />
 
-        {/* Consolidated Participant Profile route with a wildcard */}
-        <Route path="/participants/:uid/:page?" component={() => <PrivateRoute component={ParticipantProfile} />} />
-        <Route path="/participants/:uid/personal-details" component={({ params }) => <PersonalDetailsContent uid={params.uid} />} />    
+        {/*
+          Consolidated Participant Profile route. This single route handles
+          all sub-pages for a participant.
+          The `PrivateRoute` now correctly receives and forwards the `params`
+          object to the `ParticipantProfile` component.
+        */}
+        <Route path="/participants/:uid/:page?" component={(params) => <PrivateRoute component={ParticipantProfile} {...params} />} />
+
         {/* Catch-all */}
         <Route component={NotFound} />
       </Switch>
