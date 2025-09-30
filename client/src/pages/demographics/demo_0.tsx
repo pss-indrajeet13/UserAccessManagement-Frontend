@@ -122,7 +122,7 @@
 // export default Day0Demographics;
 
 
-
+// src/pages/demographics/demo_0.tsx
 import React, { useState, useEffect } from 'react';
 import { useRoute } from 'wouter'; // Import useRoute
 import ParticipantProfileTabs from '../ParticipantProfileTabs';
@@ -164,7 +164,7 @@ const Day0Demographics = () => {
         if (profileData?.sectionProfile) {
           setUserProfile({
             fullName: profileData.sectionProfile.fullName || "N/A",
-            progress: 75 // This is still a fixed value.
+            progress: 0 // This is still a fixed value.
           });
         }
       } catch (e) {

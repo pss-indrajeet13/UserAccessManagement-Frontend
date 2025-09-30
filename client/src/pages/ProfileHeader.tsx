@@ -2,13 +2,14 @@
 import React, { useState } from "react";
 import { doc, deleteDoc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
+import { useLocation } from "wouter"; // 👈 Use wouter's hook
 
 // Import images
 import ProgressIcon from '../Assets/Participant-header/progress.png';
 import HeartIcon from '../Assets/Participant-header/heart.png';
 import PlayIcon from '../Assets/Participant-header/play.png';
 import YogaIcon from '../Assets/Participant-header/yoga.png';
-import ConfirmModal from "../pages/ConfirmModal"; // make sure this path is correct
+import ConfirmModal from "./ConfirmModal";
 
 export default function ProfileHeader({
   user,
@@ -19,13 +20,13 @@ export default function ProfileHeader({
   onDelete?: (userId?: string) => void;
   onChat?: () => void;
 }) {
+  const [location, navigate] = useLocation(); // 👈 Use wouter's hook here
   const [modalOpen, setModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Add a state for user status, default to active
   const [isActive, setIsActive] = useState(user?.status === 'active');
 
-  // ... inside your component
   const handleToggleActive = async () => {
     if (!user?.uid) {
       alert("User UID missing – cannot toggle status.");
@@ -37,7 +38,7 @@ export default function ProfileHeader({
       await updateDoc(doc(db, "users", user.uid), {
         status: newStatus,
       });
-      setIsActive(!isActive); // This will re-render the button with the new status
+      setIsActive(!isActive);
       alert(`User status updated to ${newStatus}.`);
     } catch (error) {
       console.error("Error toggling user status:", error);
@@ -46,8 +47,7 @@ export default function ProfileHeader({
       setLoading(false);
     }
   };
-  
-  // Chat button logic
+
   const handleChatClick = () => {
     if (onChat) onChat();
 
@@ -67,7 +67,6 @@ export default function ProfileHeader({
     }
   };
 
-  // Delete button clicked: open confirmation modal
   const handleDeleteClick = () => {
     if (!user?.uid) {
       alert("User UID missing – cannot delete.");
@@ -76,22 +75,16 @@ export default function ProfileHeader({
     setModalOpen(true);
   };
 
-  // Modal confirm handler
   const handleConfirmDelete = async () => {
     if (!user?.uid) return;
 
     setLoading(true);
     try {
-      // Delete user from Firestore
       await deleteDoc(doc(db, "users", user.uid));
-
-      // Remove from parent list
       if (onDelete) onDelete(user.uid);
-
-      alert("User deleted successfully!");
+      navigate("/participants");
     } catch (error) {
       console.error("Error deleting user:", error);
-      alert("Failed to delete user. Check console for details.");
     } finally {
       setLoading(false);
       setModalOpen(false);
@@ -112,7 +105,6 @@ export default function ProfileHeader({
         <button className="bg-teal-600 text-white px-4 py-2 rounded-lg">Export</button>
       </div>
 
-      {/* Admin Control */}
       <div className="bg-white rounded-xl shadow-md p-5 mb-6 flex items-center justify-between">
         <div className="flex items-center">
           <div className="p-3 mr-4 rounded-md" style={{ backgroundColor: "#125566" }}>
@@ -156,7 +148,6 @@ export default function ProfileHeader({
         </div>
       </div>
 
-      {/* 3 columns */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-white rounded-xl shadow-md p-5 flex flex-col justify-between">
           <div className="flex justify-between items-center">
@@ -189,7 +180,6 @@ export default function ProfileHeader({
         </div>
       </div>
 
-      {/* Confirm Modal */}
       <ConfirmModal
         open={modalOpen}
         title="Delete Participant"

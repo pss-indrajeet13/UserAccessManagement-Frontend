@@ -297,41 +297,57 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
       </div>
 
       <div className="grid md:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white rounded-xl shadow-md">
-          <div className="p-5 pb-2 border-b" style={{ borderColor: "#125566" }}>
-            <h2 className="font-semibold" style={{ color: '#125566' }}>Activity Heat-map (28 days)</h2>
-            <p className="text-gray-500 mb-3">Daily completion status</p>
-          </div>
-          <div className="p-5 grid grid-cols-7 gap-2">
-            {[...Array(28)].map((_, i) => (
-              <div
-                key={i}
-                className="w-8 h-8 flex items-center justify-center text-xs rounded bg-gray-200"
-              >
-                {i + 1}
-              </div>
-            ))}
-          </div>
+  <div className="bg-white rounded-xl shadow-md">
+    <div className="p-5 pb-2 border-b" style={{ borderColor: "#125566" }}>
+      <h2 className="font-semibold" style={{ color: '#125566' }}>Activity Heat-map (28 days)</h2>
+      <p className="text-gray-500 mb-3">Daily completion status</p>
+    </div>
+    <div className="p-5 grid grid-cols-7 gap-2">
+      {[...Array(28)].map((_, i) => (
+        <div
+          key={i}
+          className="w-8 h-8 flex items-center justify-center text-xs rounded bg-gray-200"
+        >
+          {i + 1}
         </div>
+      ))}
+    </div>
 
-        <div className="bg-white rounded-xl shadow-md">
-          <div className="p-5 pb-2 border-b" style={{ borderColor: "#125566" }}>
-            <h2 className="font-semibold" style={{ color: '#125566' }}>Stress Level Trends</h2>
-            <p className="text-gray-500 mb-3">Weekly stress level progression</p>
-          </div>
-          <div className="p-5 flex gap-4 items-end h-40">
-            {[3, 3.5, 0, 0].map((val, i) => (
-              <div key={i} className="flex flex-col items-center flex-1">
-                <div
-                  className="bg-purple-400 w-8 rounded-t"
-                  style={{ height: `${val * 20}px` }}
-                ></div>
-                <span className="text-sm mt-1">Week {i + 1}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+    {/* Color Indicators */}
+    <div className="p-5 flex justify-center space-x-4">
+      <div className="flex items-center space-x-1">
+        <div className="w-3 h-3 rounded-sm bg-[#125566]"></div>
+        <span className="text-xs text-gray-600">Completed</span>
       </div>
+      <div className="flex items-center space-x-1">
+        <div className="w-3 h-3 rounded-sm bg-[#EB5757]"></div>
+        <span className="text-xs text-gray-600">In Process</span>
+      </div>
+      <div className="flex items-center space-x-1">
+        <div className="w-3 h-3 rounded-sm bg-gray-200"></div>
+        <span className="text-xs text-gray-600">Not Started</span>
+      </div>
+    </div>
+  </div>
+
+  <div className="bg-white rounded-xl shadow-md">
+    <div className="p-5 pb-2 border-b" style={{ borderColor: "#125566" }}>
+      <h2 className="font-semibold" style={{ color: '#125566' }}>Stress Level Trends</h2>
+      <p className="text-gray-500 mb-3">Weekly stress level progression</p>
+    </div>
+    <div className="p-5 flex gap-4 items-end h-40">
+      {[3, 3.5, 0, 0].map((val, i) => (
+        <div key={i} className="flex flex-col items-center flex-1">
+          <div
+            className="bg-purple-400 w-8 rounded-t"
+            style={{ height: `${val * 20}px` }}
+          ></div>
+          <span className="text-sm mt-1">Week {i + 1}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+</div>
 
       <div className="bg-white rounded-xl shadow-md">
         <div className="p-5 pb-2 border-b" style={{ borderColor: "#125566" }}>
@@ -344,7 +360,7 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
               <th className="px-3 py-2 text-left">Day</th>
               <th className="px-3 py-2 text-left">Date</th>
               <th className="px-3 py-2 text-left">Chapter</th>
-              <th className="px-3 py-2 text-left">Watch Time</th>
+              {/* <th className="px-3 py-2 text-left">Watch Time</th> */}
               <th className="px-3 py-2 text-left">Session Rate</th>
               <th className="px-3 py-2 text-left">Mood Rate</th>
               <th className="px-3 py-2 text-left">Status</th>
@@ -356,7 +372,7 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
                 <td className="px-3 py-2">{act.day}</td>
                 <td className="px-3 py-2">{act.date}</td>
                 <td className="px-3 py-2">{act.chapter}</td>
-                <td className="px-3 py-2">{act.watchTime}</td>
+                {/* <td className="px-3 py-2">{act.watchTime}</td> */}
                 <td className="px-3 py-2">{act.sessionRate}/5</td>
                 <td className="px-3 py-2">{act.moodRate}/5</td>
                 <td className="px-3 py-2">
