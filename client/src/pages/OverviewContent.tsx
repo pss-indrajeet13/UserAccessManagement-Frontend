@@ -1,9 +1,21 @@
 // src/pages/OverviewContent.tsx
 import React, { useState, useEffect } from 'react';
 import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import { getFirestore, doc, updateDoc, setDoc, getDoc } from 'firebase/firestore';
 import { app as sharedApp, db as sharedDb, auth as sharedAuth } from "@/firebase";
+import { format } from "date-fns";
+import { User } from 'firebase/auth';
+
+// Interface for the progress data
+interface ProgressData {
+  createdAt: string;
+  date: string;
+  feedback?: string;
+  rating1?: string;
+  rating2?: string;
+  status: string;
+}
 
 // StatCard component with inline SVG icons for heart and clock.
 const StatCard = ({
@@ -79,6 +91,9 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
   const [loading, setLoading] = useState(false);
   const [updatingAccess, setUpdatingAccess] = useState(false);
   const [componentLoading, setComponentLoading] = useState(true);
+  const [progressActivities, setProgressActivities] = useState<[string, ProgressData][]>([]);
+  const [displayedActivities, setDisplayedActivities] = useState<[string, ProgressData][]>([]);
+  const [stressLevels, setStressLevels] = useState<number[]>([]);
 
   // Initialize state with explicit default false for IsSeg0Approved
   const [segmentAccess, setSegmentAccess] = useState({
@@ -115,56 +130,111 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
     }
   }, [user]);
 
+  // Effect to fetch user activities and progress
   useEffect(() => {
-    const fetchActivityFlags = async () => {
+    const fetchUserActivities = async () => {
       if (!firebase || !user?.uid) return;
       try {
         const userActivityRef = doc(firebase.db, 'userActivity', user.uid);
         const snap = await getDoc(userActivityRef);
         if (snap.exists()) {
           const data: any = snap.data();
-          const seg0 = (data as any).segment0 || {};
-          const seg1 = (data as any).segment1 || {};
+          
+          // Update segment access flags from userActivity
+          const seg0 = data.segment0 || {};
+          const seg1 = data.segment1 || {};
           setSegmentAccess((prev) => ({
             ...prev,
             day0: typeof seg0.IsSeg0Approved === 'boolean' ? seg0.IsSeg0Approved : prev.day0,
             day1_13: typeof seg1.IsSeg1Approved === 'boolean' ? seg1.IsSeg1Approved : prev.day1_13,
           }));
+
+          // Fetch and sort progress data
+          if (data.progress) {
+            const sortedActivities = Object.entries(data.progress as { [key: string]: ProgressData }).sort((a, b) => {
+              const dayA = parseInt(a[0].replace('day', ''));
+              const dayB = parseInt(b[0].replace('day', ''));
+              return dayA - dayB;
+            });
+            setProgressActivities(sortedActivities);
+          }
         }
       } catch (err) {
-        console.error('Failed to load userActivity segment approvals', err);
+        console.error('Failed to load userActivity data', err);
       }
     };
-    fetchActivityFlags();
+    fetchUserActivities();
   }, [firebase, user?.uid]);
 
-  // const handleConfirm = async () => {
-  //   if (!user?.uid || !modalType) return;
-  //   setLoading(true);
+// Effect to filter the list for display
+useEffect(() => {
+  const completedList: [string, ProgressData][] = [];
+  let nextInProcess: [string, ProgressData] | null = null;
+  let foundInProcess = false;
 
-  //   try {
-  //     const url = modalType === "deactivate" ? "/api/deactivate-user" : "/api/delete-user";
-  //     const method = modalType === "deactivate" ? "POST" : "DELETE";
+  progressActivities.forEach(activity => {
+    // Add nullish coalescing to safely access 'status'
+    const status = activity[1].status ?? ''; 
+    
+    // Now you can safely call toLowerCase()
+    if (status.toLowerCase() === 'completed') {
+      completedList.push(activity);
+    } else if (status.toLowerCase() === 'inprogress' && !foundInProcess) {
+      nextInProcess = activity;
+      foundInProcess = true;
+    }
+  });
 
-  //     const res = await fetch(url, {
-  //       method,
-  //       headers: { "Content-Type": "application/json" },
-  //       body: JSON.stringify({ uid: user.uid }),
-  //     });
+  if (nextInProcess) {
+    setDisplayedActivities([...completedList, nextInProcess]);
+  } else {
+    setDisplayedActivities(completedList);
+  }
+}, [progressActivities]);
 
-  //     const data = await res.json();
-  //     console.log(data.message || "Action completed");
+  // Helper function to map rating text to a number
+  const mapRatingToNumber = (ratingText: string | undefined): number => {
+    const lowerCaseRating = ratingText ? ratingText.toLowerCase() : '';
+    switch (lowerCaseRating) {
+      case 'very good':
+        return 5;
+      case 'good':
+        return 4;
+      case 'okay':
+        return 3;
+      case 'bad':
+        return 2;
+      case 'very bad':
+        return 1;
+      default:
+        return 0; // Return 0 for 'N/A' or unrated
+    }
+  };
 
-  //     if (modalType === "delete") {
-  //       window.location.href = "/participants";
-  //     }
-  //   } catch (error) {
-  //     console.error("Something went wrong.", error);
-  //   } finally {
-  //     setLoading(false);
-  //     setModalOpen(false);
-  //   }
-  // };
+  // Effect to process stress level data for the chart
+  useEffect(() => {
+    const weeklyLevels: number[] = [];
+    let currentWeekTotal = 0;
+    let daysInWeek = 0;
+  
+    progressActivities.forEach(([, activity], index) => {
+      // Use the helper function to get the numerical mood rating
+      const moodRating = mapRatingToNumber(activity.rating2);
+      currentWeekTotal += moodRating;
+      daysInWeek++;
+  
+      // Check if it's the end of a week (7 days) or the last day
+      if (daysInWeek === 7 || index === progressActivities.length - 1) {
+        const averageRating = daysInWeek > 0 ? currentWeekTotal / daysInWeek : 0;
+        weeklyLevels.push(averageRating);
+        // Reset for the next week
+        currentWeekTotal = 0;
+        daysInWeek = 0;
+      }
+    });
+  
+    setStressLevels(weeklyLevels);
+  }, [progressActivities]);
 
   const handleUpdateAccess = async () => {
     if (!user?.uid || !firebase) {
@@ -235,7 +305,42 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
     setSegmentAccess(newState);
   };
 
-  // This conditional rendering is the key to preventing the error
+  const getDayNumber = (dayKey: string): string => {
+    return dayKey.replace('day', '');
+  };
+
+  const getChapterNumber = (dayKey: string): string => {
+    const day = parseInt(dayKey.replace('day', ''));
+    return `Chapter ${day}`;
+  };
+
+  const getRating = (ratingValue: string | undefined): string => {
+    if (!ratingValue) return '-';
+    // Return the number from the mapping
+    const numericalRating = mapRatingToNumber(ratingValue);
+    return `${numericalRating}/5`;
+  };
+
+  const getStatusColor = (status: string): string => {
+    const statusValue = (status ?? '').toLowerCase();
+    switch (statusValue) {
+      case 'completed':
+        return 'bg-[#125566]';
+      case 'inprogress':
+        return 'bg-[#EB5757]';
+      default:
+        return 'bg-gray-200';
+    }
+  };
+  
+  const getHeatmapColor = (dayIndex: number): string => {
+    const dayKey = `day${dayIndex}`;
+    const activity = progressActivities.find(([key]) => key === dayKey);
+    if (!activity) return 'bg-gray-200';
+    const status = activity[1].status;
+    return getStatusColor(status);
+  };
+
   if (!user || !user.uid) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -243,7 +348,10 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
       </div>
     );
   }
-  // Only render the full page if user data is available
+
+  // Define a color palette for the chart bars
+  const barColors = ['bg-[#EB5757]', 'bg-purple-400', 'bg-blue-400', 'bg-teal-400'];
+
   return (
     <>
       <div className="bg-white rounded-xl shadow-md mb-6">
@@ -297,113 +405,129 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
       </div>
 
       <div className="grid md:grid-cols-2 gap-6 mb-6">
-  <div className="bg-white rounded-xl shadow-md">
-    <div className="p-5 pb-2 border-b" style={{ borderColor: "#125566" }}>
-      <h2 className="font-semibold" style={{ color: '#125566' }}>Activity Heat-map (28 days)</h2>
-      <p className="text-gray-500 mb-3">Daily completion status</p>
-    </div>
-    <div className="p-5 grid grid-cols-7 gap-2">
-      {[...Array(28)].map((_, i) => (
-        <div
-          key={i}
-          className="w-8 h-8 flex items-center justify-center text-xs rounded bg-gray-200"
-        >
-          {i + 1}
+        <div className="bg-white rounded-xl shadow-md">
+          <div className="p-5 pb-2 border-b" style={{ borderColor: "#125566" }}>
+            <h2 className="font-semibold" style={{ color: '#125566' }}>Activity Heat-map (28 days)</h2>
+            <p className="text-gray-500 mb-3">Daily completion status</p>
+          </div>
+          <div className="p-5 grid grid-cols-7 gap-2">
+            {[...Array(29)].map((_, i) => (
+              <div
+                key={i}
+                className={`w-8 h-8 flex items-center justify-center text-xs rounded ${getHeatmapColor(i)} text-white`}
+              >
+                {i}
+              </div>
+            ))}
+          </div>
+
+          {/* Color Indicators */}
+          <div className="p-5 flex justify-center space-x-4">
+            <div className="flex items-center space-x-1">
+              <div className="w-3 h-3 rounded-sm bg-[#125566]"></div>
+              <span className="text-xs text-gray-600">Completed</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <div className="w-3 h-3 rounded-sm bg-[#EB5757]"></div>
+              <span className="text-xs text-gray-600">In Process</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <div className="w-3 h-3 rounded-sm bg-gray-200"></div>
+              <span className="text-xs text-gray-600">Not Started</span>
+            </div>
+          </div>
         </div>
-      ))}
-    </div>
 
-    {/* Color Indicators */}
-    <div className="p-5 flex justify-center space-x-4">
-      <div className="flex items-center space-x-1">
-        <div className="w-3 h-3 rounded-sm bg-[#125566]"></div>
-        <span className="text-xs text-gray-600">Completed</span>
-      </div>
-      <div className="flex items-center space-x-1">
-        <div className="w-3 h-3 rounded-sm bg-[#EB5757]"></div>
-        <span className="text-xs text-gray-600">In Process</span>
-      </div>
-      <div className="flex items-center space-x-1">
-        <div className="w-3 h-3 rounded-sm bg-gray-200"></div>
-        <span className="text-xs text-gray-600">Not Started</span>
-      </div>
-    </div>
-  </div>
+        <div className="bg-white rounded-xl shadow-md">
+          <div className="p-5 pb-2 border-b" style={{ borderColor: "#125566" }}>
+            <h2 className="font-semibold" style={{ color: '#125566' }}>Stress Level Trends</h2>
+            <p className="text-gray-500 mb-3">Weekly stress level progression</p>
+          </div>
+          <div className="relative p-5 flex gap-4 items-end">
+            {/* Y-axis labels and grid lines */}
+            <div className="absolute left-0 bottom-0 top-0 text-gray-400 text-xs flex flex-col-reverse justify-between h-40 pb-2">
+              {[0, 1, 2, 3, 4, 5].map((level) => (
+                <div key={level} className="flex-1 flex items-end">
+                  {level}
+                </div>
+              ))}
+            </div>
+            <div className="absolute left-6 right-0 bottom-0 top-8 border-l border-gray-300">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="absolute w-full border-t border-gray-200" style={{ bottom: `${i * (100 / 5)}%` }}></div>
+              ))}
+            </div>
 
-  <div className="bg-white rounded-xl shadow-md">
-    <div className="p-5 pb-2 border-b" style={{ borderColor: "#125566" }}>
-      <h2 className="font-semibold" style={{ color: '#125566' }}>Stress Level Trends</h2>
-      <p className="text-gray-500 mb-3">Weekly stress level progression</p>
-    </div>
-    <div className="p-5 flex gap-4 items-end h-40">
-      {[3, 3.5, 0, 0].map((val, i) => (
-        <div key={i} className="flex flex-col items-center flex-1">
-          <div
-            className="bg-purple-400 w-8 rounded-t"
-            style={{ height: `${val * 20}px` }}
-          ></div>
-          <span className="text-sm mt-1">Week {i + 1}</span>
+            <div className="flex-grow flex justify-around gap-4 z-10">
+              {stressLevels.length > 0 ? (
+                stressLevels.map((val, i) => (
+                  <div key={i} className="flex flex-col items-center flex-1">
+                    <span className="text-sm font-semibold mb-1">{val.toFixed(1)}/5</span>
+                    {/* Outer two-tone bar (full height) */}
+                    <div className="w-10 rounded-t h-40 bg-gray-200 flex flex-col-reverse">
+                      {/* Inner color bar (dynamic height) */}
+                      <div
+                        className={`w-full rounded-t ${barColors[i % barColors.length] || 'bg-gray-400'}`}
+                        style={{ height: `${(val / 5) * 100}%` }}
+                      ></div>
+                    </div>
+                    <span className="text-sm mt-1">Week {i + 1}</span>
+                  </div>
+                ))
+              ) : (
+                <p className="absolute text-gray-500 text-center w-full top-1/2 -translate-y-1/2">No stress data available.</p>
+              )}
+            </div>
+          </div>
         </div>
-      ))}
-    </div>
-  </div>
-</div>
-
+      </div>
+      
       <div className="bg-white rounded-xl shadow-md">
         <div className="p-5 pb-2 border-b" style={{ borderColor: "#125566" }}>
           <h2 className="font-semibold" style={{ color: '#125566' }}>Program Activity</h2>
           <p className="text-gray-500 mb-3">Daily sessions completion status</p>
         </div>
-        <table className="min-w-full text-sm p-5">
-          <thead>
-            <tr className="text-gray-700">
-              <th className="px-3 py-2 text-left">Day</th>
-              <th className="px-3 py-2 text-left">Date</th>
-              <th className="px-3 py-2 text-left">Chapter</th>
-              {/* <th className="px-3 py-2 text-left">Watch Time</th> */}
-              <th className="px-3 py-2 text-left">Session Rate</th>
-              <th className="px-3 py-2 text-left">Mood Rate</th>
-              <th className="px-3 py-2 text-left">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(user.activities || []).map((act: any, idx: number) => (
-              <tr key={idx} className="border-t">
-                <td className="px-3 py-2">{act.day}</td>
-                <td className="px-3 py-2">{act.date}</td>
-                <td className="px-3 py-2">{act.chapter}</td>
-                {/* <td className="px-3 py-2">{act.watchTime}</td> */}
-                <td className="px-3 py-2">{act.sessionRate}/5</td>
-                <td className="px-3 py-2">{act.moodRate}/5</td>
-                <td className="px-3 py-2">
-                  <span className="bg-green-100 text-green-700 px-2 py-1 rounded">
-                    {act.status}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {displayedActivities.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="text-gray-700">
+                  <th className="px-3 py-2 text-left">Day</th>
+                  <th className="px-3 py-2 text-left">Date</th>
+                  <th className="px-3 py-2 text-left">Chapter</th>
+                  <th className="px-3 py-2 text-left">Session Rate</th>
+                  <th className="px-3 py-2 text-left">Mood Rate</th>
+                  <th className="px-3 py-2 text-left">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayedActivities.map(([dayKey, act], idx) => (
+                  <tr key={dayKey} className="border-t">
+                    <td className="px-3 py-2">{`Day ${getDayNumber(dayKey)}`}</td>
+                    <td className="px-3 py-2">
+                      {act.date ? format(new Date(act.date), 'MMM do, yyyy') : '-'}
+                    </td>
+                    <td className="px-3 py-2">{getChapterNumber(dayKey)}</td>
+                    <td className="px-3 py-2">{getRating(act.rating1)}</td>
+                    <td className="px-3 py-2">{getRating(act.rating2)}</td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={`px-2 py-1 rounded text-xs font-medium uppercase ${
+                          act.status.toLowerCase() === 'completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                        }`}
+                      >
+                        {act.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-5 text-center text-gray-500">No activities found.</div>
+        )}
       </div>
-
-      {/* <ConfirmModal
-        open={modalOpen}
-        title={
-          modalType === "delete"
-            ? "Delete Participant"
-            : "Deactivate Participant"
-        }
-        message={
-          modalType === "delete"
-            ? "This action cannot be undone. Are you sure you want to delete this participant?"
-            : "Deactivating will prevent the participant from logging in. Continue?"
-        }
-        confirmLabel={modalType === "delete" ? "Delete" : "Deactivate"}
-        danger={modalType === "delete"}
-        onCancel={() => setModalOpen(false)}
-        // onConfirm={handleConfirm}
-        loading={loading}
-      /> */}
     </>
   );
 };

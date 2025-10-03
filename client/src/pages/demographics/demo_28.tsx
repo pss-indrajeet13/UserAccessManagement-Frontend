@@ -17,32 +17,21 @@ interface QuestionResponse {
     timestamp: string;
 }
 
-// --- Custom No Data Note Component ---
-const NoDataNote = () => (
-    <div className="bg-orange-100 border-l-4 border-orange-500 text-orange-700 p-4 mt-8 rounded-lg shadow-md" role="alert">
-        <div className="flex items-start">
-            <svg className="h-5 w-5 mr-3 mt-1 text-orange-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path fillRule="evenodd" d="M8.257 3.321a.75.75 0 01.942 0l7.5 7.5a.75.75 0 01-1.06 1.06L10 5.811 3.864 12.381a.75.75 0 01-1.06-1.06l7.5-7.5z" clipRule="evenodd" />
-            </svg>
-            <p className="font-semibold">Participant data has not been filled out.</p>
-        </div>
-    </div>
-);
-// ---------------------------------
-
 // --- Reusable Section Component ---
+// This component now only renders data if available, or renders nothing if data is empty,
+// allowing the main component to handle the "all empty" case.
 const QuestionnaireSection = ({ title, data }: { title: string, data: QuestionResponse[] | null }) => {
-    // If data is null or empty array, return null to skip rendering the box.
+    // If data is null or empty array, return null so it doesn't render.
     if (!data || data.length === 0) {
         return null;
     }
 
     return (
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-white rounded-lg shadow p-6 mb-6">
             <h3 className="text-xl font-bold text-teal-600 mb-4 border-b pb-2">{title}</h3>
             <div className="space-y-6">
                 {data
-                    .sort((a, b) => a.questionNumber - b.questionNumber)
+                    .sort((a, b) => a.questionNumber - b.questionNumber) // Sorts by question number
                     .map((item) => (
                         <div key={item.questionNumber} className="border-l-4 border-teal-200 pl-4 py-2 bg-gray-50 rounded-md">
                             <p className="text-gray-900 font-semibold mb-1">
@@ -59,10 +48,11 @@ const QuestionnaireSection = ({ title, data }: { title: string, data: QuestionRe
 };
 // ---------------------------------
 
-const Day0Demographics = () => {
-    const [, params] = useRoute("/participants/:uid/demographics/day-0");
+
+const Day28Demographics = () => {
+    // Extracts the UID based on the '/participants/:uid/demographics/day-28' route
+    const [, params] = useRoute("/participants/:uid/demographics/day-28");
     const uid = params?.uid;
-    const SEGMENT_NAME = "Segment 1"; // Used for error checking
 
     const [userProfile, setUserProfile] = useState<UserProfileData | null>(null);
     const [sectionAData, setSectionAData] = useState<QuestionResponse[] | null>(null);
@@ -73,7 +63,7 @@ const Day0Demographics = () => {
     // Derived state to check if EITHER section has data
     const hasData = (sectionAData?.length || 0) > 0 || (sectionBData?.length || 0) > 0;
 
-    // Object used for ProfileHeader to show the name immediately
+    // Determine the user's name for the header immediately
     const headerUser = userProfile
         ? userProfile
         : { fullName: loading ? "Loading..." : "Participant", progress: 0 };
@@ -91,7 +81,7 @@ const Day0Demographics = () => {
                 // Fetch user profile and questionnaire data in parallel
                 const [profileRes, questionnaireRes] = await Promise.all([
                     fetch(`/api/user-profile/${uid}`),
-                    fetch(`/api/user-profile/${uid}/day-0/questionnaire`),
+                    fetch(`/api/user-profile/${uid}/day-28/questionnaire`),
                 ]);
 
                 // Handle profile response immediately
@@ -109,39 +99,19 @@ const Day0Demographics = () => {
                     setUserProfile({ fullName: "Error loading profile", progress: 0 });
                 }
 
-                // --- 2. Handle Questionnaire Response ---
-                let questionnaireBody;
-                try {
-                    // Attempt to read body as JSON (our server always returns JSON)
-                    questionnaireBody = await questionnaireRes.json();
-                } catch (e) {
-                    // If JSON parsing fails (e.g., empty 404 response), throw a generic error
-                    throw new Error(`Invalid JSON response for questionnaire data (Status: ${questionnaireRes.status}).`);
-                }
-                
+                // Handle questionnaire response
                 if (questionnaireRes.ok) {
-                    // SCENARIO 1: Success (200 OK): Data is present or we received empty arrays
-                    setSectionAData(questionnaireBody.sectionA || []);
-                    setSectionBData(questionnaireBody.sectionB || []);
+                    const questionnaireData = await questionnaireRes.json();
+                    setSectionAData(questionnaireData.sectionA || []);
+                    setSectionBData(questionnaireData.sectionB || []);
                 } else {
-                    // SCENARIO 2: Failure (Non-200 Status, e.g., 404): Check if it's the specific "missing data" case
-                    const errorMessage = questionnaireBody.error || `Server responded with status ${questionnaireRes.status}.`;
-                    
-                    // Check for the specific error string sent by the backend for missing data
-                    if (errorMessage.includes(SEGMENT_NAME.replace(" ", " "))) { 
-                        // If the backend confirmed the segment data is missing, set special state
-                        setError("DATA_NOT_FILLED");
-                        setSectionAData([]);
-                        setSectionBData([]);
-                    } else {
-                        // For all other errors (true server errors or unexpected failures), throw the error
-                        throw new Error(errorMessage);
-                    }
+                    const errorBody = await questionnaireRes.json();
+                    throw new Error(errorBody.error || "Failed to fetch questionnaire data.");
                 }
+
 
             } catch (e) {
                 console.error("Error fetching data: ", e);
-                // Set the error message unless we already decided it was a friendly "DATA_NOT_FILLED" state
                 setError(e instanceof Error ? e.message : "An unknown error occurred.");
             } finally {
                 setLoading(false);
@@ -155,30 +125,34 @@ const Day0Demographics = () => {
         <>
             <ParticipantProfileTabs />
             <div className="max-w-7xl mx-auto px-6 p-6">
-                {/* Use the headerUser object to show name immediately */}
+                {/* Fix 2: Use the headerUser object to show name immediately */}
                 <ProfileHeader user={headerUser} />
 
                 <div className="mt-8">
                     {loading ? (
-                        <div className="text-center text-xl text-gray-500 mt-8 animate-pulse">Loading Day 0 questionnaire data...</div>
-                    ) : error && error === "DATA_NOT_FILLED" || !hasData ? (
-                        // If EITHER the explicit error state is set OR there is no data found after loading
-                        <NoDataNote />
+                        <div className="text-center text-xl text-gray-500 mt-8 animate-pulse">Loading Day 28 questionnaire data...</div>
                     ) : error ? (
-                        // SCENARIO: A genuine server error (e.g., 500 status or network failure)
+                        // Show generic error if fetch failed entirely (e.g., 500 status)
                         <div className="text-red-600 p-4 bg-red-100 rounded-lg border border-red-300">
-                            <p className="font-bold">Critical Error Loading Data:</p>
+                            <p className="font-bold">Error Loading Data:</p>
                             <p>{error}</p>
                         </div>
+                    ) : !hasData ? (
+                        // Fix 1: Show the simple "No Data Fill" note
+                        <div className="bg-orange-100 border-l-4 border-orange-500 text-orange-700 p-4 mt-8 rounded-lg shadow-md" role="alert">
+                            <p className="font-bold text-lg">User has not data fill for Day 28 demographics.</p>
+                        </div>
                     ) : (
-                        // SCENARIO: Data is present and ready to display
                         <div className="grid md:grid-cols-2 gap-8">
+                            {/* Section A Display - Only renders if data exists */}
                             <QuestionnaireSection
-                                title="Compilation Scale (Section - A)"
+                                title="Compilation Scale (Section - A) - Day 28"
                                 data={sectionAData}
                             />
+
+                            {/* Section B Display - Only renders if data exists */}
                             <QuestionnaireSection
-                                title="Compilation Scale (Section - B)"
+                                title="Compilation Scale (Section - B) - Day 28"
                                 data={sectionBData}
                             />
                         </div>
@@ -189,4 +163,4 @@ const Day0Demographics = () => {
     );
 };
 
-export default Day0Demographics;
+export default Day28Demographics;

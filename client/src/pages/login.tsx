@@ -1,3 +1,4 @@
+// src/pages/login.tsx
 import React, { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useLocation } from "wouter";
@@ -24,8 +25,23 @@ export default function Login() {
     setLoading(false);
   };
 
+  // const handlePrivacyClick = () => {
+  //   setLocation("/privacy"); // Adjust the route to match your privacy page path
+  // };
+
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-[#50C8E5]/10 to-[#125566]/10 p-4">
+    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-[#50C8E5]/10 to-[#125566]/10 p-4 relative">
+      {/* Privacy Button - Positioned at top right outside the container */}
+      {/* <div className="absolute top-4 right-4 z-10">
+        <button
+          type="button"
+          onClick={handlePrivacyClick}
+          className="text-[#50C8E5] underline hover:text-[#125566] transition-colors duration-200 font-medium"
+        >
+          Privacy Policy
+        </button>
+      </div> */}
+
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md transform transition-all duration-300 hover:shadow-2xl">
         <h2 className="text-2xl font-bold text-[#125566] mb-2 text-center">Welcome Back</h2>
         <p className="text-gray-600 mb-6 text-center">Please enter your details to sign in.</p>

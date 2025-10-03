@@ -22,6 +22,9 @@ import JournalsContent from "./pages/JournalsContent";
 import PersonalDetailsContent from "./pages/PersonalDetailsContent";
 import OverviewContent from "./pages/OverviewContent";
 import Demo0 from './pages/demographics/demo_0.tsx';
+import Demo13 from './pages/demographics/demo_13.tsx';
+import Demo28 from './pages/demographics/demo_28.tsx';
+import Privacy from './pages/privacy.tsx';
 
 // Auth context
 import { AuthProvider, useAuth } from "./context/AuthContext";
@@ -83,6 +86,9 @@ function Router() {
         <Route path="/participants/:uid/journals" component={() => <PrivateRoute component={JournalsContent} />} />
         <Route path="/participants/:uid/personal-details" component={() => <PrivateRoute component={PersonalDetailsContent} />} />
         <Route path="/participants/:uid/overview" component={() => <PrivateRoute component={OverviewContent} />} />
+        <Route path="/participants/:uid/demographics/day-13" component={() => <PrivateRoute component={Demo13} />} />
+        <Route path="/participants/:uid/demographics/day-28" component={() => <PrivateRoute component={Demo28} />} />
+        <Route path="/privacy" component={Privacy} />
 
         {/*
           Consolidated Participant Profile route. This single route handles

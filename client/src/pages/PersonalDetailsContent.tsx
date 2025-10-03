@@ -67,7 +67,7 @@ const PersonalDetailsContent = ({ uid }: { uid: string }) => {
   // --- SINGLE MESSAGE BLOCK: Handles both missing user data AND API failures ---
   if (!personalData) { 
     return (
-      <div className="p-8">
+      <div className="p-0">
         <div className="bg-orange-100 border-l-4 border-orange-500 text-orange-700 p-4 rounded-md shadow-lg" role="alert">
           <div className="flex items-start">
             <svg className="h-5 w-5 mr-3 mt-1 text-orange-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">

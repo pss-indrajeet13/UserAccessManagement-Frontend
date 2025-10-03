@@ -96,7 +96,8 @@ export default function ProfileHeader({
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-[#125566] text-2xl font-bold">
-            {user?.fullName || user?.userName || user?.sectionProfile?.fullName || "Unknown User"}
+            {user?.fullName === "Error loading profile" ? "Participant Not Found" : user?.fullName || "Unknown User"}
+            {/* {user?.fullName || user?.userName || user?.sectionProfile?.fullName || "Unknown User"} */}
           </h1>
           <p className="text-gray-500">
             View Personal Information, Track History, Monitor Progress & Access Insights

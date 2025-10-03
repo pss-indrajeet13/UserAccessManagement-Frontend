@@ -1,3 +1,4 @@
+// src/pages/dashboard.tsx
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import "@fontsource/poppins";
@@ -13,7 +14,11 @@ import redheart from "@/Assets/Dashboard-screen/red.png";
 import greenlabel from "@/Assets/Dashboard-screen/gre.png";
 import folderG from "@/Assets/Dashboard-screen/foldergrey.png";
 import Header from "@/components/layout/header";
-import { fallbackUsers, getAllUsers } from "@/lib/fallbackData";
+
+// ⚠️ NEW IMPORTS FOR FIREBASE ⚠️
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, doc, getDoc } from 'firebase/firestore';
+import { app as sharedApp, db as sharedDb, auth as sharedAuth } from "@/firebase";
 
 interface DashboardStats {
   totalUsers: number;
@@ -35,124 +40,81 @@ function clampPercent(n: number) {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
-function normalizeStats(input: any): DashboardStats {
-  const users = getAllUsers();
-  const totalUsers = users.length;
-  const totalActiveUsers = users.filter((u: any) => u.status === "active").length;
-  const parseNum = (v: any) => {
-    if (typeof v === "number") return v;
-    if (typeof v === "string") return parseFloat(v.replace(/%/g, ""));
-    return 0;
-  };
-  const overallProgress = clampPercent(parseNum(input?.overallProgress));
-  const now = Date.now();
-  const inactiveForDays = input?.inactiveForDays ?? users.filter((u: any) => (now - new Date(u.lastActive).getTime()) > 86400000).length;
-  return {
-    totalUsers,
-    totalActiveUsers,
-    averageStreakLength: input?.averageStreakLength ?? `${Math.round((users.reduce((s: number, u: any) => s + (u.currentStage ?? 0), 0) / (totalUsers || 1)))} /Days`,
-    averageMoodScore: typeof input?.averageMoodScore === "string" && /\/.+/.test(input.averageMoodScore)
-      ? input.averageMoodScore
-      : `${Math.round((users.reduce((s: number, u: any) => s + (u.score ?? 0), 0) / (totalUsers || 1)) / 10)}/10`,
-    chaptersUnlockedToday: parseNum(input?.chaptersUnlockedToday) || 0,
-    overallProgress,
-    inactiveForDays,
-    streakBreaks: parseNum(input?.streakBreaks) || 0,
-    milestones: parseNum(input?.milestones) || 0,
-    meditationVideoUsers: parseNum(input?.meditationVideoUsers) || Math.floor(totalActiveUsers * 0.6),
-    incompleteSessions: parseNum(input?.incompleteSessions) || Math.floor(totalActiveUsers * 0.2),
-    journalsSubmitted: parseNum(input?.journalsSubmitted) || Math.floor(totalActiveUsers * 0.5),
-  };
-}
-
-function computeFallbackDashboardStats(): DashboardStats {
-  const users = getAllUsers();
-  const totalUsers = users.length;
-  const activeUsers = users.filter((u: any) => u.status === "active").length;
-  const now = Date.now();
-  const avgProgress = Math.round(
-    users.reduce((sum: number, u: any) => sum + (u.progress ?? 0), 0) / (totalUsers || 1)
-  );
-  const avgDaysSinceCreated = Math.round(
-    users.reduce((sum: number, u: any) => sum + Math.max(0, (now - new Date(u.createdAt).getTime()) / 86400000), 0) /
-    (totalUsers || 1)
-  );
-  const avgMood10 = Math.min(10, Math.max(0, Math.round(
-    users.reduce((sum: number, u: any) => sum + (u.score ?? 0), 0) / (totalUsers || 1) / 10
-  )));
-  const inactiveForDays = users.filter((u: any) => (now - new Date(u.lastActive).getTime()) > 24 * 60 * 60 * 1000).length;
-  const milestones = users.filter((u: any) => (u.progress ?? 0) >= 100).length;
-  const meditationVideoUsers = Math.floor(activeUsers * 0.6);
-  const incompleteSessions = Math.floor(activeUsers * 0.2);
-  const journalsSubmitted = Math.floor(activeUsers * 0.5);
-
-  return {
-    totalUsers,
-    totalActiveUsers: activeUsers,
-    averageStreakLength: `${avgDaysSinceCreated}/Days`,
-    averageMoodScore: `${avgMood10}/10`,
-    chaptersUnlockedToday: 0,
-    overallProgress: avgProgress,
-    inactiveForDays,
-    streakBreaks: 0,
-    milestones,
-    meditationVideoUsers,
-    incompleteSessions,
-    journalsSubmitted,
-  };
-}
-
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // ⚠️ NEW STATE FOR ADMIN NAME, using 'name' from your image ⚠️
+  const [adminName, setAdminName] = useState("Admin"); 
 
   useEffect(() => {
-    const fetchDashboardStats = async () => {
+    const fetchDashboardData = async (userId: string) => {
       try {
-        const response = await fetch("/api/dashboard-stats", { cache: "no-store" });
-        if (response.ok) {
-          const data = await response.json();
-          const normalized = normalizeStats(data);
-          setStats(normalized);
-          setError(null);
-        } else {
-          console.warn("/api/dashboard-stats returned", response.status);
-          const fallback = computeFallbackDashboardStats();
-          setStats(fallback);
-          setError("Using fallback data due to server error.");
+        // Fetch the current admin user's details
+        const dbInstance = sharedDb || getFirestore(sharedApp);
+        const userDocRef = doc(dbInstance, 'users', userId);
+        const userDocSnap = await getDoc(userDocRef);
+
+        if (userDocSnap.exists()) {
+          const userData = userDocSnap.data();
+          // ⚠️ FETCHING 'name' INSTEAD OF 'fullname' ⚠️
+          if (userData.name) {
+            setAdminName(userData.name);
+          }
         }
+        
+        // Fetch dashboard stats from your API
+        const response = await fetch("/api/dashboard-stats", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`Server responded with status: ${response.status}`);
+        }
+        const data: DashboardStats = await response.json();
+        setStats(data);
+        setError(null);
       } catch (e: any) {
-        console.error("Error fetching dashboard stats:", e);
-        const fallback = computeFallbackDashboardStats();
-        setStats(fallback);
-        setError("Using fallback data due to network error.");
+        console.error("Error fetching dashboard data:", e);
+        setStats(null);
+        setError("Failed to load live data. Please check your network or server.");
       } finally {
         setLoading(false);
       }
     };
+    
+    // ⚠️ FETCHING ADMIN NAME AND DASHBOARD STATS ⚠️
+    const authInstance = sharedAuth || getAuth(sharedApp);
+    const unsubscribe = onAuthStateChanged(authInstance, (user) => {
+      if (user) {
+        // User is signed in, fetch data
+        fetchDashboardData(user.uid);
+      } else {
+        // User is signed out
+        setLoading(false);
+        setError("User not authenticated.");
+      }
+    });
 
-    fetchDashboardStats();
+    // Cleanup function
+    return () => unsubscribe();
   }, []);
 
-  const progress = clampPercent(Number(stats?.overallProgress ?? 0));
+  const progress = clampPercent(stats?.overallProgress ?? 0);
   const circumference = 283;
   const progressLength = (progress / 100) * circumference;
 
   const cardStats = [
     {
       title: "Total Active Users",
-      value: `${stats?.totalActiveUsers ?? 0}/${stats?.totalUsers ?? getAllUsers().length}`,
+      value: `${stats?.totalActiveUsers ?? 0}/${stats?.totalUsers ?? 0}`,
       img: YogaIcon,
     },
     {
       title: "Average Streak Length",
-      value: stats?.averageStreakLength ?? "0/Days",
+      value: stats?.averageStreakLength ?? "0 Days",
       img: FireIcon,
     },
     {
       title: "Average Mood Score",
-      value: stats?.averageMoodScore ?? "0/10",
+      value: stats?.averageMoodScore ?? "0/5",
       img: SmileIcon,
     },
     {
@@ -166,33 +128,28 @@ export default function Dashboard() {
     return <div className="p-8 text-center">Loading dashboard...</div>;
   }
 
-  if (!stats) {
-    return <div className="p-8 text-center text-red-500">{error ?? "Failed to load dashboard data."}</div>;
+  if (error) {
+    return <div className="p-8 text-center text-red-500">{error}</div>;
   }
 
   return (
     <div className="font-poppins bg-gray-100 min-h-screen">
-      {/* Fixed Top Header */}
       <Header
         title="Dashboard"
         subtitle="Overview of key metrics"
         onAddUser={() => { /* Handle add user action */ }}
       />
-
-      {/* Dashboard content */}
       <main className="p-6">
         <div className="mb-6">
           <h1 className="text-2xl font-bold" style={{ color: "#125566" }}>
-            Welcome Mrs. Neelima
+            Welcome, {adminName}
           </h1>
           <p className="text-base text-black mt-1">
             Let’s View Today's Statistics
           </p>
         </div>
 
-        {/* Progress + Stats */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-10">
-          {/* Left side progress */}
           <Card className="md:col-span-2 bg-white rounded-2xl shadow-md">
             <CardHeader
               className="pb-2 border-b"
@@ -238,7 +195,6 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Right side stats */}
           <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-6">
             {cardStats.map((stat, index) => (
               <Card
@@ -262,9 +218,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Daily Digest + Alerts Section */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Daily Digest Card */}
           <Card className="bg-white rounded-2xl shadow-md border border-gray-200">
             <CardHeader className="pb-2 border-b border-[#125566]">
               <div className="flex justify-between items-start w-full">
@@ -319,7 +273,6 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Alerts & Notifications Card */}
           <Card className="bg-white rounded-2xl shadow-md border border-gray-200">
             <CardHeader className="pb-2 border-b border-[#125566]">
               <div className="flex justify-between items-start w-full">
@@ -339,7 +292,7 @@ export default function Dashboard() {
             <CardContent className="p-4 space-y-3">
               <div className="flex items-center gap-3 p-3 rounded-xl border border-yellow-300 bg-yellow-50 text-sm">
                 <img src={profilyellow} alt="Inactive icon" className="w-5 h-5" />
-                <p>{stats?.inactiveForDays ?? 0} participations inactive for 0+ days</p>
+                <p>{stats?.inactiveForDays ?? 0} participations inactive for 7+ days</p>
               </div>
               <div className="flex items-center gap-3 p-3 rounded-xl border border-red-300 bg-red-50 text-sm">
                 <img src={redheart} alt="Streak break icon" className="w-5 h-5" />
@@ -352,7 +305,6 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Recent Journals Entries Card */}
           <Card className="bg-white rounded-2xl shadow-md border border-gray-200 col-span-full mt-6">
             <CardHeader className="pb-2 border-b border-[#125566]">
               <div className="flex justify-between items-start w-full">
