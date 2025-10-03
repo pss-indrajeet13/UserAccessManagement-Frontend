@@ -88,7 +88,7 @@ function Router() {
         <Route path="/participants/:uid/overview" component={() => <PrivateRoute component={OverviewContent} />} />
         <Route path="/participants/:uid/demographics/day-13" component={() => <PrivateRoute component={Demo13} />} />
         <Route path="/participants/:uid/demographics/day-28" component={() => <PrivateRoute component={Demo28} />} />
-        <Route path="/privacy" component={Privacy} />
+        <Route path="/privacy-policy" component={Privacy} />
 
         {/*
           Consolidated Participant Profile route. This single route handles
