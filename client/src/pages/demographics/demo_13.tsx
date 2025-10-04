@@ -63,10 +63,11 @@ const NoDataNote = () => (
 // ---------------------------------
 
 
-const Day13Demographics = () => {
+const Day13Demographics: React.FC<{ uid?: string }> = ({ uid: propUid }) => {
     // Extracts the UID based on the '/participants/:uid/demographics/day-13' route
     const [, params] = useRoute("/participants/:uid/demographics/day-13");
-    const uid = params?.uid;
+    const routeUid = params?.uid;
+    const uid = propUid ?? routeUid;
 
     const [userProfile, setUserProfile] = useState<UserProfileData | null>(null);
     const [sectionAData, setSectionAData] = useState<QuestionResponse[] | null>(null);

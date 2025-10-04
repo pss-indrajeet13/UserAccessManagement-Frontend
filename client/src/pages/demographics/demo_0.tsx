@@ -59,9 +59,10 @@ const QuestionnaireSection = ({ title, data }: { title: string, data: QuestionRe
 };
 // ---------------------------------
 
-const Day0Demographics = () => {
+const Day0Demographics: React.FC<{ uid?: string }> = ({ uid: propUid }) => {
     const [, params] = useRoute("/participants/:uid/demographics/day-0");
-    const uid = params?.uid;
+    const routeUid = params?.uid;
+    const uid = propUid ?? routeUid;
     const SEGMENT_NAME = "Segment 1"; // Used for error checking
 
     const [userProfile, setUserProfile] = useState<UserProfileData | null>(null);

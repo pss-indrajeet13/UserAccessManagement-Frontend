@@ -6,9 +6,8 @@ import "@fontsource/poppins/500.css";
 import "@fontsource/poppins/600.css";
 import "@fontsource/poppins/700.css";
 import YogaIcon from "../Assets/Dashboard-screen/yoga.png";
-import FireIcon from "../Assets/Dashboard-screen/fire.png";
 import SmileIcon from "../Assets/Dashboard-screen/smile.png";
-import BookIcon from "../Assets/Dashboard-screen/book.png";
+// FireIcon and BookIcon removed as their associated cards were removed
 import profilyellow from "@/Assets/Dashboard-screen/pro.png";
 import redheart from "@/Assets/Dashboard-screen/red.png";
 import greenlabel from "@/Assets/Dashboard-screen/gre.png";
@@ -23,9 +22,9 @@ import { app as sharedApp, db as sharedDb, auth as sharedAuth } from "@/firebase
 interface DashboardStats {
   totalUsers: number;
   totalActiveUsers: number;
-  averageStreakLength: string;
+  // averageStreakLength removed
   averageMoodScore: string;
-  chaptersUnlockedToday: number;
+  // chaptersUnlockedToday removed
   overallProgress: number;
   inactiveForDays: number;
   streakBreaks: number;
@@ -68,6 +67,7 @@ export default function Dashboard() {
         if (!response.ok) {
           throw new Error(`Server responded with status: ${response.status}`);
         }
+        // Data structure fetched here will need to match the updated DashboardStats interface
         const data: DashboardStats = await response.json();
         setStats(data);
         setError(null);
@@ -101,6 +101,7 @@ export default function Dashboard() {
   const circumference = 283;
   const progressLength = (progress / 100) * circumference;
 
+  // The cards that will be rendered next to the progress card
   const cardStats = [
     {
       title: "Total Active Users",
@@ -108,19 +109,9 @@ export default function Dashboard() {
       img: YogaIcon,
     },
     {
-      title: "Average Streak Length",
-      value: stats?.averageStreakLength ?? "0 Days",
-      img: FireIcon,
-    },
-    {
       title: "Average Mood Score",
       value: stats?.averageMoodScore ?? "0/5",
       img: SmileIcon,
-    },
-    {
-      title: "Chapters Unlocked Today",
-      value: stats?.chaptersUnlockedToday?.toString() ?? "0",
-      img: BookIcon,
     },
   ];
 
@@ -149,8 +140,10 @@ export default function Dashboard() {
           </p>
         </div>
 
+        {/* Updated grid layout: Overall Progress takes 3/5, Stats take 2/5 */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-10">
-          <Card className="md:col-span-2 bg-white rounded-2xl shadow-md">
+          {/* Overall Program Progress Card: Now spans 3 columns on medium screens and up */}
+          <Card className="md:col-span-3 bg-white rounded-2xl shadow-md">
             <CardHeader
               className="pb-2 border-b"
               style={{ borderColor: "#125566" }}
@@ -164,12 +157,14 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent className="flex flex-col items-center">
               <div className="relative w-52 h-28 mt-6">
+                {/* SVG for progress arc */}
                 <svg className="w-full h-full">
                   <path
                     d="M10,100 A90,90 0 0,1 190,100"
                     fill="none"
                     stroke="#E5EBED"
                     strokeWidth="20"
+                    strokeLinecap="round"
                   />
                   <path
                     d="M10,100 A90,90 0 0,1 190,100"
@@ -195,11 +190,12 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-6">
+          {/* Key Stats Cards: Now spans 2 columns and stacks vertically */}
+          <div className="md:col-span-2 grid grid-cols-1 gap-6">
             {cardStats.map((stat, index) => (
               <Card
                 key={index}
-                className="relative bg-[#256B78] text-white rounded-2xl shadow-md overflow-hidden p-6"
+                className="relative bg-[#256B78] text-white rounded-2xl shadow-md overflow-hidden p-6 h-full"
               >
                 <div>
                   <p className="text-sm uppercase tracking-wide">
@@ -234,6 +230,7 @@ export default function Dashboard() {
               </div>
             </CardHeader>
             <CardContent className="p-4 space-y-6">
+              {/* Meditation Videos */}
               <div>
                 <div className="flex justify-between items-center text-sm pb-1">
                   <span>Users who complete meditations videos</span>
@@ -246,6 +243,7 @@ export default function Dashboard() {
                   ></div>
                 </div>
               </div>
+              {/* Incomplete Sessions */}
               <div>
                 <div className="flex justify-between items-center text-sm pb-1">
                   <span>Users who Pending/incomplete sessions</span>
@@ -258,6 +256,7 @@ export default function Dashboard() {
                   ></div>
                 </div>
               </div>
+              {/* Journals Submitted */}
               <div>
                 <div className="flex justify-between items-center text-sm pb-1">
                   <span>Users who Journals Submitted</span>
@@ -290,14 +289,17 @@ export default function Dashboard() {
               </div>
             </CardHeader>
             <CardContent className="p-4 space-y-3">
+              {/* Inactive Users Alert */}
               <div className="flex items-center gap-3 p-3 rounded-xl border border-yellow-300 bg-yellow-50 text-sm">
                 <img src={profilyellow} alt="Inactive icon" className="w-5 h-5" />
                 <p>{stats?.inactiveForDays ?? 0} participations inactive for 7+ days</p>
               </div>
+              {/* Streak Break Alert - Text updated as requested */}
               <div className="flex items-center gap-3 p-3 rounded-xl border border-red-300 bg-red-50 text-sm">
                 <img src={redheart} alt="Streak break icon" className="w-5 h-5" />
-                <p>{stats?.streakBreaks ?? 0} users experiencing streak breaks this week</p>
+                <p>Deactive Participants detected.</p>
               </div>
+              {/* Milestone Alert */}
               <div className="flex items-center gap-3 p-3 rounded-xl border border-green-300 bg-green-50 text-sm">
                 <img src={greenlabel} alt="Milestone icon" className="w-5 h-5" />
                 <p>{stats?.milestones ?? 0} users achieved 28-days milestone today</p>
@@ -305,6 +307,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
+          {/* Recent Journals Card remains */}
           <Card className="bg-white rounded-2xl shadow-md border border-gray-200 col-span-full mt-6">
             <CardHeader className="pb-2 border-b border-[#125566]">
               <div className="flex justify-between items-start w-full">
@@ -316,9 +319,9 @@ export default function Dashboard() {
                     Last participations reactions and insights
                   </p>
                 </div>
-                <button className="px-6 py-2 bg-gray-100 text-sm rounded-lg font-medium text-[#125566] hover:bg-gray-200">
+                {/* <button className="px-6 py-2 bg-gray-100 text-sm rounded-lg font-medium text-[#125566] hover:bg-gray-200">
                   View All Journals
-                </button>
+                </button> */}
               </div>
             </CardHeader>
             <CardContent className="p-6 flex flex-col items-center justify-center text-center">

@@ -1,15 +1,56 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+// src/pages/Notifications.tsx
+import { useState, useEffect } from "react"; 
+import { useQueryClient } from "@tanstack/react-query";
 import Header from "@/components/layout/header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
-import type { Notification } from "@shared/schema";
-import { getFallbackStats, getLocalNotifications, addLocalNotification } from "@/lib/fallbackData";
+
+// --- Global Variable Declarations to satisfy TypeScript ---
+declare const __app_id: string | undefined;
+declare const __firebase_config: string | undefined;
+
+// --- Firebase Imports and Setup ---
+import { initializeApp } from "firebase/app";
+import { 
+    getFirestore, 
+    collection, 
+    query, 
+    orderBy, 
+    limit, 
+    onSnapshot 
+} from "firebase/firestore";
+
+// Mandatory global variables for Canvas environment
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+let db: any = null;
+
+try {
+  const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+  if (Object.keys(firebaseConfig).length > 0) {
+    const app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
+  } else {
+    console.warn("Firebase configuration not found. Cannot connect to Firestore.");
+  }
+} catch (e) {
+  console.error("Error initializing Firebase:", e);
+}
+
+
+// --- Data Type & Utility Functions ---
+
+// Simplified Activity/Notification interface
+interface Activity {
+    id: string; // Firestore Document ID
+    targetUserId: string; // The UID of the participant this activity is about
+    type: 'registration' | 'session_completed' | 'access_request' | 'pending_access' | 'streak_interrupted' | 'inactivity';
+    message: string;
+    userName: string;
+    sentAt: string; // ISO date string
+}
 
 function formatRelativeTime(date: Date): string {
   const now = new Date();
@@ -25,288 +66,268 @@ function formatRelativeTime(date: Date): string {
   return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
 }
 
+const getActivityDetails = (activity: Activity) => {
+    switch (activity.type) {
+        case 'registration':
+            return {
+                icon: 'person_add_alt_1',
+                color: 'text-blue-600',
+                bgColor: 'bg-blue-50',
+                title: 'New Registration',
+                subtitle: `${activity.userName} ${activity.message}`,
+            };
+        case 'session_completed':
+            return {
+                icon: 'check_circle',
+                color: 'text-green-600',
+                bgColor: 'bg-green-50',
+                title: 'Session Completed',
+                subtitle: `${activity.userName} ${activity.message}`,
+            };
+        case 'access_request': 
+        case 'pending_access':
+            return {
+                icon: 'warning',
+                color: 'text-yellow-600',
+                bgColor: 'bg-yellow-50',
+                title: 'Pending Access Request',
+                subtitle: `${activity.userName} ${activity.message}`,
+            };
+        case 'streak_interrupted':
+            return {
+                icon: 'sync_disabled',
+                color: 'text-red-600',
+                bgColor: 'bg-red-50',
+                title: 'Streak Interrupted - Login Missed',
+                subtitle: `${activity.userName} ${activity.message}`,
+            };
+        case 'inactivity':
+            return {
+                icon: 'sentiment_dissatisfied',
+                color: 'text-red-600',
+                bgColor: 'bg-red-50',
+                title: 'Inactivity Alert',
+                subtitle: `${activity.userName} ${activity.message}`,
+            };
+        default:
+            return {
+                icon: 'info',
+                color: 'text-gray-600',
+                bgColor: 'bg-gray-50',
+                title: 'General Alert',
+                subtitle: activity.message,
+            };
+    }
+};
+
+// --- DUMMY NAVIGATION HOOK (Replace with your actual router hook) ---
+const useNavigation = () => {
+    const navigate = (path: string) => {
+        console.log(`[ROUTER] Navigating to: ${path}`);
+    };
+    return navigate;
+}
+
+// --- Component ---
+
 export default function Notifications() {
-  const [notificationMessage, setNotificationMessage] = useState("");
-  const [notificationTarget, setNotificationTarget] = useState("all_active");
+    const navigate = useNavigation();
+    const queryClient = useQueryClient();
+    const [selectedFilter, setSelectedFilter] = useState("All Notifications");
 
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+    const [activities, setActivities] = useState<Activity[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    
+    useEffect(() => {
+        if (!db) {
+            console.error("Firestore database is not initialized.");
+            setIsLoading(false);
+            return;
+        }
 
-  const { data: notifications, isLoading } = useQuery({
-    queryKey: ["/api/notifications"],
-    queryFn: async () => {
-      try {
-        const res = await fetch("/api/notifications", { credentials: "include" });
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        return await res.json();
-      } catch {
-        return getLocalNotifications();
-      }
-    },
-  });
+        // --- REVERTED TO CORRECT PUBLIC CANVAS PATH ---
+        // This is the required path for public, shared data.
+        const collectionPath = `/artifacts/${appId}/public/data/activities`; 
+        
+        // --- END REVERTED PATH ---
+        
+        // Create a query: Order by 'sentAt' (Firestore Timestamp) and limit results
+        const q = query(
+            collection(db, collectionPath),
+            orderBy('sentAt', 'desc'),
+            limit(50)
+        );
 
-  const { data: stats } = useQuery({
-    queryKey: ["/api/stats"],
-    queryFn: async () => {
-      try {
-        const res = await fetch("/api/stats", { credentials: "include" });
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        return await res.json();
-      } catch {
-        return getFallbackStats();
-      }
-    },
-  });
-
-  const sendNotificationMutation = useMutation({
-    mutationFn: async ({ message, target }: { message: string; target: string }) => {
-      return await apiRequest("POST", "/api/notifications", { message, target });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/activities"] });
-      toast({ title: "Success", description: "Notification sent successfully" });
-      setNotificationMessage("");
-    },
-    onError: (_err, variables) => {
-      const created = addLocalNotification(variables.message, variables.target);
-      queryClient.setQueryData(["/api/notifications"], (prev: any) => [created, ...(prev || [])]);
-      toast({ title: "Queued locally", description: "Notification stored locally (no API)." });
-      setNotificationMessage("");
-    },
-  });
-
-  const handleSendNotification = () => {
-    if (!notificationMessage.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter a notification message",
-        variant: "destructive",
-      });
-      return;
-    }
-    sendNotificationMutation.mutate({
-      message: notificationMessage,
-      target: notificationTarget,
-    });
-  };
-
-  const getTargetDisplayName = (target: string) => {
-    switch (target) {
-      case "all_active":
-        return "All Active Users";
-      case "specific_group":
-        return "Specific User Group";
-      case "inactive":
-        return "Inactive Users";
-      default:
-        return target;
-    }
-  };
-
-  const getTargetUserCount = (target: string) => {
-    if (!stats) return 0;
-    switch (target) {
-      case "all_active":
-        return stats.activeUsers;
-      case "inactive":
-        return stats.inactiveUsers;
-      case "specific_group":
-        return Math.floor(stats.totalUsers * 0.3); // Mock 30% for specific group
-      default:
-        return stats.totalUsers;
-    }
-  };
-
-  return (
-    <>
-      <Header 
-        title="Push Notifications" 
-        subtitle="Send notifications to your mobile application users"
-      />
-      
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <span className="material-icons text-primary text-xl">notifications</span>
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Total Sent</p>
-                  <p className="text-2xl font-semibold text-gray-900">
-                    {(notifications as any)?.length || 0}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <span className="material-icons text-success text-xl">people</span>
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Active Recipients</p>
-                  <p className="text-2xl font-semibold text-gray-900">
-                    {stats?.activeUsers || 0}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                  <span className="material-icons text-warning text-xl">schedule</span>
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">This Week</p>
-                  <p className="text-2xl font-semibold text-gray-900">
-                    {notifications?.filter((n: Notification) => {
-                      const weekAgo = new Date();
-                      weekAgo.setDate(weekAgo.getDate() - 7);
-                      return new Date(n.sentAt) >= weekAgo;
-                    }).length || 0}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Send Notification Panel */}
-          <Card>
-            <CardContent className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">Send New Notification</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Message</label>
-                  <Textarea
-                    value={notificationMessage}
-                    onChange={(e) => setNotificationMessage(e.target.value)}
-                    rows={4}
-                    placeholder="Enter your notification message here..."
-                    className="resize-none"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    {notificationMessage.length}/500 characters
-                  </p>
-                </div>
+        // Set up the real-time listener
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const fetchedActivities: Activity[] = [];
+            snapshot.forEach(doc => {
+                const data = doc.data();
                 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Target Audience</label>
-                  <Select value={notificationTarget} onValueChange={setNotificationTarget}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all_active">All Active Users</SelectItem>
-                      <SelectItem value="specific_group">Specific User Group</SelectItem>
-                      <SelectItem value="inactive">Inactive Users</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    This will send to approximately {getTargetUserCount(notificationTarget)} users
-                  </p>
-                </div>
+                // Map Firestore data to Activity interface
+                const activity: Activity = {
+                    id: doc.id,
+                    targetUserId: data.userId || data.uid || 'unknown-uid', 
+                    type: data.type || 'registration', 
+                    userName: data.userName || 'Unknown User',
+                    message: data.message || 'No message content.',
+                    // Safely convert Timestamp to ISO date string
+                    sentAt: data.sentAt && data.sentAt.toDate ? data.sentAt.toDate().toISOString() : new Date().toISOString(),
+                };
+                fetchedActivities.push(activity);
+            });
+            setActivities(fetchedActivities);
+            setIsLoading(false);
+        }, (error) => {
+            console.error("Error fetching activities from Firestore:", error);
+            setIsLoading(false);
+        });
 
-                <Button 
-                  onClick={handleSendNotification}
-                  disabled={sendNotificationMutation.isPending}
-                  className="w-full bg-primary text-white hover:bg-blue-700"
-                >
-                  <span className="material-icons text-sm mr-2">send</span>
-                  {sendNotificationMutation.isPending ? "Sending..." : "Send Notification"}
-                </Button>
-              </div>
+        // Cleanup the listener when the component unmounts
+        return () => unsubscribe();
+    }, []);
 
-              <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-                <div className="flex items-start">
-                  <span className="material-icons text-primary mr-2">info</span>
-                  <div>
-                    <p className="text-sm font-medium text-primary">Notification Tips</p>
-                    <ul className="text-xs text-gray-600 mt-2 space-y-1">
-                      <li>• Keep messages concise and actionable</li>
-                      <li>• Use clear call-to-action phrases</li>
-                      <li>• Test with a small group first</li>
-                      <li>• Consider user time zones</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+    
+    const filterOptions = [
+        "All Notifications",
+        "New Registration",
+        "Session Completed",
+        "Access Request",
+        "User Alerts",
+    ];
 
-          {/* Notification History */}
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold text-gray-900">Notification History</h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/notifications"] })}
-                >
-                  <span className="material-icons">refresh</span>
-                </Button>
-              </div>
+    const filteredActivities = activities.filter(activity => {
+        if (selectedFilter === "All Notifications") return true;
+        if (selectedFilter === "New Registration") return activity.type === 'registration';
+        if (selectedFilter === "Session Completed") return activity.type === 'session_completed';
+        if (selectedFilter === "Access Request") return activity.type === 'access_request' || activity.type === 'pending_access';
+        if (selectedFilter === "User Alerts") return activity.type === 'streak_interrupted' || activity.type === 'inactivity';
+        return false;
+    });
 
-              <div className="space-y-4 max-h-96 overflow-y-auto">
-                {isLoading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <div key={i} className="p-4 border border-gray-200 rounded-lg">
-                      <div className="flex items-start justify-between mb-2">
-                        <Skeleton className="h-4 w-32" />
-                        <Skeleton className="h-3 w-16" />
-                      </div>
-                      <Skeleton className="h-4 w-full mb-2" />
-                      <Skeleton className="h-3 w-24" />
+    // --- Activity Feed Card Component ---
+    const ActivityCard = ({ activity }: { activity: Activity }) => {
+        const { icon, color, bgColor, title, subtitle } = getActivityDetails(activity);
+
+        const handleViewProfile = () => {
+            if (activity.targetUserId && activity.targetUserId !== 'unknown-uid') {
+                // Navigate to the user profile page using their UID
+                navigate(`/participants/${activity.targetUserId}`); 
+            } else {
+                console.warn("Cannot navigate: User UID is missing.");
+            }
+        };
+
+        const handleChat = () => {
+            if (activity.targetUserId && activity.targetUserId !== 'unknown-uid') {
+                console.log(`Initiating chat for UID: ${activity.targetUserId}`);
+            } else {
+                console.warn("Cannot chat: User UID is missing.");
+            }
+        };
+
+        return (
+            <div className={`flex items-start p-4 rounded-xl shadow-sm ${bgColor} border-l-4 ${color.replace('text', 'border')}`}>
+                <span className={`material-icons text-xl ${color} mr-3 mt-1`}>{icon}</span>
+                <div className="flex-1">
+                    <div className="flex justify-between items-start">
+                        <p className={`text-sm font-semibold ${color} mb-1`}>{title}</p>
+                        <span className="text-xs text-gray-500 whitespace-nowrap">
+                            {formatRelativeTime(new Date(activity.sentAt))}
+                        </span>
                     </div>
-                  ))
-                ) : (notifications as any)?.length === 0 ? (
-                  <div className="text-center py-8">
-                    <span className="material-icons text-4xl text-gray-400 mb-4">notifications_off</span>
-                    <p className="text-gray-500">No notifications sent yet</p>
-                    <p className="text-sm text-gray-400">Send your first notification to get started</p>
-                  </div>
-                ) : (
-                  (notifications as any)?.map((notification: any) => (
-                    <div key={notification.id} className="p-4 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
-                      <div className="flex items-start justify-between mb-2">
-                        <span className="text-sm font-medium text-gray-900">
-                          {getTargetDisplayName(notification.target)}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {formatRelativeTime(new Date(notification.sentAt))}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-700 mb-2 line-clamp-2">
-                        {notification.message}
-                      </p>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-500">
-                          Sent to {getTargetUserCount(notification.target)} users
-                        </span>
-                        <div className="flex items-center space-x-1">
-                          <span className="w-2 h-2 bg-green-400 rounded-full"></span>
-                          <span className="text-xs text-green-600">Delivered</span>
+                    <p className="text-sm text-gray-700">{subtitle}</p>
+                    
+                    {/* Action Buttons */}
+                    <div className="mt-3 flex space-x-2">
+                        <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="bg-white hover:bg-gray-100 text-teal-600 border-teal-600"
+                            onClick={handleViewProfile}
+                            disabled={activity.targetUserId === 'unknown-uid'}
+                        >
+                            View Profile
+                        </Button>
+                        <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="bg-white hover:bg-gray-100 text-green-600 border-green-600"
+                            onClick={handleChat}
+                            disabled={activity.targetUserId === 'unknown-uid'}
+                        >
+                            Chat
+                        </Button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    return (
+        <div className="font-poppins bg-gray-50 min-h-screen">
+            <Header 
+                title="Notifications" 
+                subtitle="Manage and view overall all Notifications"
+            />
+            
+            <div className="flex justify-end p-6 pt-0 max-w-7xl mx-auto md:justify-start lg:justify-end">
+                 <div className="relative">
+                    <select
+                        value={selectedFilter}
+                        onChange={(e) => setSelectedFilter(e.target.value)}
+                        className="appearance-none bg-white border border-gray-300 rounded-lg py-2 pl-3 pr-10 text-sm font-medium text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 cursor-pointer"
+                    >
+                        {filterOptions.map(option => (
+                            <option key={option} value={option}>
+                                {option}
+                            </option>
+                        ))}
+                    </select>
+                    <span className="material-icons absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-500 text-lg">
+                        arrow_drop_down
+                    </span>
+                </div>
+            </div>
+
+            <main className="flex-1 overflow-y-auto p-6 pt-0 max-w-7xl mx-auto">
+                <Card className="shadow-lg">
+                    <CardContent className="p-6">
+                        <h3 className="text-xl font-bold text-gray-800 mb-6 border-b pb-3">Activity Log</h3>
+                        
+                        <div className="space-y-4">
+                            {isLoading ? (
+                                Array.from({ length: 8 }).map((_, i) => (
+                                    <div key={i} className="flex items-start p-4 rounded-xl bg-white shadow-sm border-l-4 border-gray-200">
+                                        <Skeleton className="w-6 h-6 rounded-full mr-3 mt-1" />
+                                        <div className="flex-1">
+                                            <div className="flex justify-between items-start mb-1">
+                                                <Skeleton className="h-4 w-40" />
+                                                <Skeleton className="h-3 w-16" />
+                                            </div>
+                                            <Skeleton className="h-4 w-full mb-2" />
+                                            <div className="flex space-x-2 mt-3">
+                                                <Skeleton className="h-8 w-24 rounded-lg" />
+                                                <Skeleton className="h-8 w-20 rounded-lg" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            ) : filteredActivities.length === 0 ? (
+                                <div className="text-center py-12 bg-gray-50 rounded-lg">
+                                    <span className="material-icons text-6xl text-gray-300 mb-4">task_alt</span>
+                                    <p className="text-gray-600 font-semibold text-lg">No New Activities</p>
+                                    <p className="text-sm text-gray-400">All alerts in this category have been processed or none have occurred yet.</p>
+                                </div>
+                            ) : (
+                                filteredActivities.map((activity) => (
+                                    <ActivityCard key={activity.id} activity={activity} />
+                                ))
+                            )}
                         </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                    </CardContent>
+                </Card>
+            </main>
         </div>
-      </div>
-    </>
-  );
+    );
 }

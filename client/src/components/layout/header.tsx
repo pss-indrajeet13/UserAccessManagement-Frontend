@@ -31,7 +31,7 @@ export default function Header({ title, subtitle, onAddUser }: HeaderProps) {
         {/* Container for the right-side icons (notifications and profile). */}
         <div className="flex items-center space-x-4">
           {/* A `Link` from Wouter that wraps the notifications button. Clicking this will navigate to the `/notifications` route. */}
-          <Link href="/notificationss">
+          <Link href="/notifications">
             <Button className="p-2 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200">
               {/* Bell icon from `lucide-react`. */}
               <Bell className="h-5 w-5" />
