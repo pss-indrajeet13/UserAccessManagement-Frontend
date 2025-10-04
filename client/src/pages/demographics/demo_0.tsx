@@ -156,8 +156,8 @@ const Day0Demographics: React.FC<{ uid?: string }> = ({ uid: propUid }) => {
         <>
             <ParticipantProfileTabs />
             <div className="max-w-7xl mx-auto px-6 p-6">
-                {/* Use the headerUser object to show name immediately */}
-                <ProfileHeader user={headerUser} />
+                {/* Use the headerUser object and include uid for status resolution */}
+                <ProfileHeader user={{ ...headerUser, uid }} />
 
                 <div className="mt-8">
                     {loading ? (

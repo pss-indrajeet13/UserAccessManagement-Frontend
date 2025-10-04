@@ -44,7 +44,7 @@ export default function ProfileHeader({
     }
 
     // If this is the placeholder header object, defer resolving status
-    if (user.fullName === 'Loading...' || (user.progress === 0 && Object.keys(user).length <= 2)) {
+    if (user.fullName === 'Loading...') {
       console.log("Received placeholder user; deferring status resolution");
       safeSet(null);
       return () => { mounted = false; };
@@ -62,7 +62,9 @@ export default function ProfileHeader({
     (async () => {
       setLoadingStatus(true);
       try {
-        const possibleUid = user?.uid || user?.id;
+        const routeUidMatch = (location || '').match(/^\/?participants\/([^\/]+)/);
+        const routeUid = routeUidMatch ? routeUidMatch[1] : undefined;
+        const possibleUid = user?.uid || user?.id || routeUid;
         if (possibleUid) {
           const ref = doc(db, "users", possibleUid);
           const snap = await getDoc(ref);
@@ -75,12 +77,21 @@ export default function ProfileHeader({
           }
         }
 
+        const usersCol = collection(db, "users");
         if (user?.email) {
-          const usersCol = collection(db, "users");
           const q = firestoreQuery(usersCol, where("email", "==", user.email));
           const snaps = await getDocs(q);
           if (!snaps.empty) {
             const first = snaps.docs[0].data();
+            safeSet(typeof first?.status !== "undefined" ? Boolean(first.status) : false);
+            return;
+          }
+        }
+        if (user?.fullName) {
+          const q2 = firestoreQuery(usersCol, where("fullName", "==", user.fullName));
+          const snaps2 = await getDocs(q2);
+          if (!snaps2.empty) {
+            const first = snaps2.docs[0].data();
             safeSet(typeof first?.status !== "undefined" ? Boolean(first.status) : false);
             return;
           }

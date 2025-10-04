@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRoute } from 'wouter';
 import { doc, getDoc, collection, getDocs, query, orderBy } from 'firebase/firestore';
-import { ref, getDownloadURL } from 'firebase/storage';
+import { ref, getDownloadURL, listAll } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import ParticipantProfileTabs from './ParticipantProfileTabs';
 import ProfileHeader from './ProfileHeader';
@@ -31,6 +31,8 @@ const JournalsContent = () => {
   const [loading, setLoading] = useState(true);
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
   const audioRef = React.useRef<HTMLAudioElement | null>(null); // Use a ref to control the audio element
+  const [audioFiles, setAudioFiles] = useState<{ name: string; url: string; path: string }[]>([]);
+  const [audioLoading, setAudioLoading] = useState<boolean>(false);
 
   useEffect(() => {
     if (!uid) {
@@ -141,6 +143,82 @@ const JournalsContent = () => {
     }
   }, [playingAudio, journals]);
 
+  // Auto-link audio files to journals by filename or day number
+  useEffect(() => {
+    if (!journals.length || !audioFiles.length) return;
+    setJournals((prev) =>
+      prev.map((j) => {
+        if (j.audioUrl) return j;
+        const byName = j.audioFileName
+          ? audioFiles.find((f) => f.name.toLowerCase() === j.audioFileName!.toLowerCase() || f.path.toLowerCase().endsWith(`/${j.audioFileName!.toLowerCase()}`))
+          : undefined;
+        if (byName) return { ...j, audioUrl: byName.url };
+        const m = (j.title || '').match(/(day\s*)?(\d+)/i);
+        if (m) {
+          const day = parseInt(m[2], 10);
+          const rx = new RegExp(`day\s*${day}[_\-]`, 'i');
+          const byDay = audioFiles.find((f) => rx.test(f.name) || rx.test(f.path));
+          if (byDay) return { ...j, audioUrl: byDay.url };
+        }
+        return j;
+      })
+    );
+  }, [audioFiles, journals.length]);
+
+  // Fetch audio feedback files for this user
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      if (!uid) {
+        setAudioFiles([]);
+        return;
+      }
+      setAudioLoading(true);
+      try {
+        // First try 'audio_feedback/{uid}/'
+        const userFolderRef = ref(storage, `audio_feedback/${uid}`);
+        let items: any[] = [];
+        try {
+          const res = await listAll(userFolderRef);
+          items = res.items;
+        } catch (e) {
+          console.warn("Error listing user audio folder:", e);
+        }
+
+        if (!items || items.length === 0) {
+          const rootRef = ref(storage, "audio_feedback");
+          try {
+            const res = await listAll(rootRef);
+            items = res.items;
+          } catch (e) {
+            console.warn("Error listing root audio_feedback:", e);
+          }
+        }
+
+        const fetched = await Promise.all(
+          (items || []).map(async (itemRef: any) => ({
+            name: itemRef.name,
+            path: itemRef.fullPath,
+            url: await getDownloadURL(itemRef),
+          }))
+        );
+        const files = fetched
+          .filter((f) => /\.(m4a|mp3|wav|aac|ogg)$/i.test(f.name))
+          .sort((a, b) => b.name.localeCompare(a.name));
+        if (!cancelled) setAudioFiles(files);
+      } catch (err) {
+        console.error("Failed to load audio feedback:", err);
+        if (!cancelled) setAudioFiles([]);
+      } finally {
+        if (!cancelled) setAudioLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [uid]);
+
   if (loading) return <div>Loading...</div>;
   if (!participant) return <div>User not found.</div>;
 
@@ -151,62 +229,23 @@ const JournalsContent = () => {
         <ProfileHeader user={participant} />
         <div className="bg-white rounded-xl shadow-md p-5 mt-6">
           <div className="pb-2 border-b" style={{ borderColor: "#125566" }}>
-            <h2 className="font-semibold mb-2 text-xl" style={{ color: '#125566' }}>Journal Entries</h2>
-            <p className="text-gray-500 mb-4">Daily reflections with AI powered insights</p>
+            <h2 className="font-semibold mb-2 text-xl" style={{ color: '#125566' }}>Audio Feedback</h2>
+            <p className="text-gray-500 mb-4">Voice notes and feedback stored in Firebase Storage</p>
           </div>
-          <div className="space-y-8">
-            {journals.length > 0 ? (
-              journals.map((journal) => (
-                <div key={journal.id} className="mb-4">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-bold text-lg text-[#125566]">{journal.title} <span className="font-normal text-gray-500 text-base">– {new Date(journal.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span></span>
-                    <div className="flex items-center space-x-1">
-                      {[1, 2, 3, 4, 5].map(i => (
-                        <svg key={i} className={`w-5 h-5 ${i <= journal.rating ? 'text-[#125566]' : 'text-gray-300'}`} fill="currentColor" viewBox="0 0 20 20">
-                          <polygon points="10,1 12.59,7.36 19.51,7.36 13.97,11.63 16.56,17.99 10,13.72 3.44,17.99 6.03,11.63 0.49,7.36 7.41,7.36" />
-                        </svg>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="text-gray-700 mb-3">{journal.entry}</div>
-                  <div className="bg-gray-100 rounded-lg p-3 flex items-center">
-                    <button
-                      className="mr-3 text-[#125566] focus:outline-none"
-                      onClick={() => handlePlayPause(journal.id, journal.audioUrl)}
-                      disabled={!journal.audioUrl}
-                    >
-                      {playingAudio === journal.id ? (
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <rect x="6" y="5" width="4" height="14" rx="1" fill="#125566" />
-                          <rect x="14" y="5" width="4" height="14" rx="1" fill="#125566" />
-                        </svg>
-                      ) : (
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <polygon points="6,4 20,12 6,20" fill="#125566" />
-                        </svg>
-                      )}
-                    </button>
-                    {/* Placeholder for waveform */}
-                    <div className="flex-1 h-10 rounded overflow-hidden flex items-center">
-                      {journal.audioUrl ? (
-                        <audio
-                          src={journal.audioUrl}
-                          controls
-                          className="w-full h-full"
-                        />
-                      ) : (
-                        <div className="flex-1 h-10 bg-gray-200 rounded overflow-hidden flex items-center">
-                          <p className="text-gray-500 text-sm p-2">
-                            No audio feedback found
-                          </p>
-                        </div>
-                      )}
-                    </div>
+          <div className="space-y-4">
+            {audioLoading ? (
+              <div className="text-gray-500">Loading audio...</div>
+            ) : audioFiles.length > 0 ? (
+              audioFiles.map((file) => (
+                <div key={file.path} className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
+                  <div className="flex-1 mr-4">
+                    <div className="text-sm text-gray-700 truncate">{file.name}</div>
+                    <audio src={file.url} controls className="w-full mt-2" />
                   </div>
                 </div>
               ))
             ) : (
-              <div className="text-center py-10 text-gray-500">No journal entries found for this user.</div>
+              <div className="text-gray-500">No audio feedback files found.</div>
             )}
           </div>
         </div>

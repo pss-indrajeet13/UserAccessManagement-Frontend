@@ -12,7 +12,7 @@ declare const __app_id: string | undefined;
 declare const __firebase_config: string | undefined;
 
 // --- Firebase Imports and Setup ---
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import { 
     getFirestore, 
     collection, 
@@ -21,6 +21,7 @@ import {
     limit, 
     onSnapshot 
 } from "firebase/firestore";
+import { app as sharedApp, db as sharedDb } from "@/firebase";
 
 // Mandatory global variables for Canvas environment
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -30,13 +31,19 @@ let db: any = null;
 try {
   const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
   if (Object.keys(firebaseConfig).length > 0) {
-    const app = initializeApp(firebaseConfig);
+    const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
     db = getFirestore(app);
-  } else {
-    console.warn("Firebase configuration not found. Cannot connect to Firestore.");
   }
 } catch (e) {
-  console.error("Error initializing Firebase:", e);
+  console.warn("Canvas firebase config not available, falling back to shared app.");
+}
+
+if (!db) {
+  try {
+    db = sharedDb || getFirestore(sharedApp);
+  } catch (e) {
+    console.error("Failed to obtain Firestore instance:", e);
+  }
 }
 
 
@@ -145,34 +152,39 @@ export default function Notifications() {
             return;
         }
 
-        // --- REVERTED TO CORRECT PUBLIC CANVAS PATH ---
-        // This is the required path for public, shared data.
-        const collectionPath = `/artifacts/${appId}/public/data/activities`; 
-        
-        // --- END REVERTED PATH ---
-        
-        // Create a query: Order by 'sentAt' (Firestore Timestamp) and limit results
-        const q = query(
-            collection(db, collectionPath),
-            orderBy('sentAt', 'desc'),
-            limit(50)
-        );
+        // Prefer main 'activities' collection. If it fails, fall back to canvas path.
+        const activitiesRef = collection(db, 'activities');
+        let qRef: any;
+        try {
+            qRef = query(activitiesRef, orderBy('timestamp', 'desc'), limit(50));
+        } catch {
+            qRef = query(collection(db, `/artifacts/${appId}/public/data/activities`), orderBy('sentAt', 'desc'), limit(50));
+        }
 
-        // Set up the real-time listener
-        const unsubscribe = onSnapshot(q, (snapshot) => {
+        const unsubscribe = onSnapshot(qRef, (snapshot) => {
             const fetchedActivities: Activity[] = [];
             snapshot.forEach(doc => {
-                const data = doc.data();
-                
-                // Map Firestore data to Activity interface
+                const data: any = doc.data();
+                const ts = data.timestamp || data.sentAt;
+                const when = ts?.toDate ? ts.toDate() : (typeof ts === 'number' ? new Date(ts) : new Date());
+
+                // Normalize types from different producers
+                const rawType = (data.type || '').toString();
+                let normType: Activity['type'];
+                if (['registration', 'signup', 'login', 'new_user'].includes(rawType)) normType = 'registration';
+                else if (['session_completed', 'completed', 'stage_complete', 'chapter_completed'].includes(rawType)) normType = 'session_completed';
+                else if (['access_request', 'pending_access', 'request_access'].includes(rawType)) normType = 'access_request';
+                else if (['streak_interrupted', 'streak_break'].includes(rawType)) normType = 'streak_interrupted';
+                else if (['inactivity', 'inactive'].includes(rawType)) normType = 'inactivity';
+                else normType = 'registration';
+
                 const activity: Activity = {
                     id: doc.id,
-                    targetUserId: data.userId || data.uid || 'unknown-uid', 
-                    type: data.type || 'registration', 
-                    userName: data.userName || 'Unknown User',
-                    message: data.message || 'No message content.',
-                    // Safely convert Timestamp to ISO date string
-                    sentAt: data.sentAt && data.sentAt.toDate ? data.sentAt.toDate().toISOString() : new Date().toISOString(),
+                    targetUserId: data.userId || data.uid || 'unknown-uid',
+                    type: normType,
+                    userName: data.userName || data.name || 'Unknown User',
+                    message: data.message || data.description || '',
+                    sentAt: when.toISOString(),
                 };
                 fetchedActivities.push(activity);
             });
@@ -183,7 +195,6 @@ export default function Notifications() {
             setIsLoading(false);
         });
 
-        // Cleanup the listener when the component unmounts
         return () => unsubscribe();
     }, []);
 
