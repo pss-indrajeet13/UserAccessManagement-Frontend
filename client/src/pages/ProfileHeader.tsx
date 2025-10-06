@@ -24,10 +24,38 @@ export default function ProfileHeader({
   const [location, navigate] = useLocation();
   const [modalOpen, setModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [reportProgress, setReportProgress] = useState<number | null>(null);
 
   // State to hold the current active status.
   const [isActive, setIsActive] = useState<boolean | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
+
+  // Fetch progress from userActivity/{uid}/report subcollection
+  useEffect(() => {
+    let mounted = true;
+    const loadProgress = async () => {
+      try {
+        const uid = user?.uid || user?.id;
+        if (!uid) { if (mounted) setReportProgress(null); return; }
+        const snaps = await getDocs(collection(db, 'userActivity', uid, 'report'));
+        if (snaps.empty) { if (mounted) setReportProgress(null); return; }
+        let best = snaps.docs[0];
+        const toMs = (v: any) => (v?.toMillis ? v.toMillis() : (typeof v === 'string' || v instanceof Date) ? new Date(v).getTime() : 0);
+        for (const d of snaps.docs) {
+          const ca = (d.data() as any)?.createdAt ?? null;
+          const bestCa = (best.data() as any)?.createdAt ?? null;
+          if (toMs(ca) > toMs(bestCa)) best = d;
+        }
+        const dta = (best.data() as any);
+        const prog = typeof dta?.progress === 'number' ? dta.progress : (typeof dta?.Progress === 'number' ? dta.Progress : undefined);
+        if (mounted) setReportProgress(typeof prog === 'number' ? Math.max(0, Math.min(100, Math.round(prog))) : null);
+      } catch {
+        if (mounted) setReportProgress(null);
+      }
+    };
+    loadProgress();
+    return () => { mounted = false; };
+  }, [user?.uid]);
 
   // Use useEffect to handle changes in the 'user' prop.
   useEffect(() => {
@@ -315,7 +343,7 @@ export default function ProfileHeader({
           <div className="flex justify-between items-center">
             <div className="flex flex-col">
               <div className="text-4xl font-bold" style={{ color: '#5FB3B3' }}>
-                {`${user?.progress || 0}%`}
+                {`${reportProgress ?? user?.progress ?? 0}%`}
               </div>
               <div className="text-gray-500 text-sm mt-2">Program progress</div>
             </div>

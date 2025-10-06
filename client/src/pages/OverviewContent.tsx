@@ -97,7 +97,7 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
 
   // Initialize state with explicit default false for IsSeg0Approved
   const [segmentAccess, setSegmentAccess] = useState({
-    day0: Boolean(user?.IsSeg0Approved ?? false),
+    day0: true,
     day1_13: Boolean(user?.IsSeg1Approved ?? false),
     day14_28: Boolean((user?.IsSeg2Approved ?? false) || (user?.IsSeg3Approved ?? false)),
   });
@@ -122,7 +122,7 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
   useEffect(() => {
     if (user && user.uid) {
       setSegmentAccess({
-        day0: Boolean(user.IsSeg0Approved ?? false),
+        day0: true,
         day1_13: Boolean(user.IsSeg1Approved ?? false),
         day14_28: Boolean((user.IsSeg2Approved ?? false) || (user.IsSeg3Approved ?? false)),
       });
@@ -143,10 +143,12 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
           // Update segment access flags from userActivity
           const seg0 = data.segment0 || {};
           const seg1 = data.segment1 || {};
+          const seg2 = data.segment2 || {};
           setSegmentAccess((prev) => ({
             ...prev,
-            day0: typeof seg0.IsSeg0Approved === 'boolean' ? seg0.IsSeg0Approved : prev.day0,
+            day0: true,
             day1_13: typeof seg1.IsSeg1Approved === 'boolean' ? seg1.IsSeg1Approved : prev.day1_13,
+            day14_28: typeof seg2.IsSeg2Approved === 'boolean' ? seg2.IsSeg2Approved : prev.day14_28,
           }));
 
           // Fetch and sort progress data
@@ -246,7 +248,7 @@ useEffect(() => {
     try {
       const userDocRef = doc(firebase.db, 'users', user.uid);
       const updateData = {
-        IsSeg0Approved: segmentAccess.day0,
+        IsSeg0Approved: true,
         IsSeg1Approved: segmentAccess.day1_13,
         IsSeg2Approved: segmentAccess.day14_28,
         IsSeg3Approved: segmentAccess.day14_28,
@@ -255,16 +257,18 @@ useEffect(() => {
       const userActivityRef = doc(firebase.db, 'userActivity', user.uid);
       try {
         await updateDoc(userActivityRef, {
-          "segment0.IsSeg0Approved": Boolean(segmentAccess.day0),
+          "segment0.IsSeg0Approved": true,
           "segment1.IsSeg1Approved": Boolean(segmentAccess.day1_13),
+          "segment2.IsSeg2Approved": Boolean(segmentAccess.day14_28),
         });
       } catch (e: any) {
         if (e?.code === 'not-found') {
           await setDoc(
             userActivityRef,
             {
-              segment0: { IsSeg0Approved: Boolean(segmentAccess.day0) },
+              segment0: { IsSeg0Approved: true },
               segment1: { IsSeg1Approved: Boolean(segmentAccess.day1_13) },
+              segment2: { IsSeg2Approved: Boolean(segmentAccess.day14_28) },
             },
             { merge: true }
           );
@@ -285,6 +289,9 @@ useEffect(() => {
 
   const handleSegmentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = event.target;
+    if (name === 'day0') {
+      return; // Day 0 is always true and not toggleable
+    }
     let newState = { ...segmentAccess, [name]: checked } as typeof segmentAccess;
 
     if (checked) {
@@ -295,10 +302,7 @@ useEffect(() => {
         newState.day1_13 = true;
       }
     } else {
-      if (name === 'day0') {
-        newState.day1_13 = false;
-        newState.day14_28 = false;
-      } else if (name === 'day1_13') {
+      if (name === 'day1_13') {
         newState.day14_28 = false;
       }
     }
@@ -367,6 +371,7 @@ useEffect(() => {
               name="day0"
               checked={segmentAccess.day0}
               onChange={handleSegmentChange}
+              disabled
               className="form-checkbox h-5 w-5 text-teal-600"
             />
             <label htmlFor="day0" className="text-gray-700">Day 0</label>

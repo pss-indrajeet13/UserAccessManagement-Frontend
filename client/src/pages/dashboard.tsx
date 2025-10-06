@@ -16,8 +16,10 @@ import Header from "@/components/layout/header";
 
 // ⚠️ NEW IMPORTS FOR FIREBASE ⚠️
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, getDoc } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, type Firestore } from 'firebase/firestore';
 import { app as sharedApp, db as sharedDb, auth as sharedAuth } from "@/firebase";
+import { fetchPendingActivationUsers } from "@/lib/pendingActivation";
+import { getAllUsers } from "@/lib/fallbackData";
 
 interface DashboardStats {
   totalUsers: number;
@@ -39,61 +41,105 @@ function clampPercent(n: number) {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
+function buildFallbackDashboardStats(): DashboardStats {
+  const users = getAllUsers();
+  const totalUsers = users.length;
+  const safeTotal = totalUsers === 0 ? 1 : totalUsers;
+
+  const totalActiveUsers = users.filter((user) => user.status === "active").length;
+  const averageScore = users.reduce((sum, user) => sum + (user.score ?? 0), 0) / safeTotal;
+  const moodScoreOutOfFive = Math.max(0, Math.min(5, averageScore / 20));
+  const overallProgress = users.reduce((sum, user) => sum + (user.progress ?? 0), 0) / safeTotal;
+  const inactiveForDays = users.filter((user) => user.status !== "active").length;
+  const streakBreaks = users.filter((user) => user.progress <= 25 || user.status !== "active").length;
+  const milestones = users.filter((user) => user.progress >= 100).length;
+  const meditationVideoUsers = users.filter((user) => user.progress >= 70).length;
+  const incompleteSessions = users.filter((user) => user.progress < 40).length;
+  const journalsSubmitted = users.filter((user) => user.progress >= 50).length;
+
+  return {
+    totalUsers,
+    totalActiveUsers,
+    averageMoodScore: `${moodScoreOutOfFive.toFixed(1)}/5`,
+    overallProgress: Math.round(overallProgress),
+    inactiveForDays,
+    streakBreaks,
+    milestones,
+    meditationVideoUsers,
+    incompleteSessions,
+    journalsSubmitted,
+  };
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // ⚠️ NEW STATE FOR ADMIN NAME, using 'name' from your image ⚠️
-  const [adminName, setAdminName] = useState("Admin"); 
+  const [adminName, setAdminName] = useState("Admin");
+  const [deactivatedCount, setDeactivatedCount] = useState(0); 
 
   useEffect(() => {
-    const fetchDashboardData = async (userId: string) => {
+    const dbInstance = sharedDb || getFirestore(sharedApp);
+
+    const fetchDashboardData = async (userId: string, database: Firestore) => {
       try {
-        // Fetch the current admin user's details
-        const dbInstance = sharedDb || getFirestore(sharedApp);
-        const userDocRef = doc(dbInstance, 'users', userId);
+        const userDocRef = doc(database, "users", userId);
         const userDocSnap = await getDoc(userDocRef);
 
         if (userDocSnap.exists()) {
           const userData = userDocSnap.data();
-          // ⚠️ FETCHING 'name' INSTEAD OF 'fullname' ⚠️
           if (userData.name) {
             setAdminName(userData.name);
           }
         }
-        
-        // Fetch dashboard stats from your API
+      } catch (profileError) {
+        console.warn("Unable to load admin profile information:", profileError);
+      }
+
+      let resolvedStats: DashboardStats;
+      try {
         const response = await fetch("/api/dashboard-stats", { cache: "no-store" });
         if (!response.ok) {
           throw new Error(`Server responded with status: ${response.status}`);
         }
-        // Data structure fetched here will need to match the updated DashboardStats interface
-        const data: DashboardStats = await response.json();
-        setStats(data);
-        setError(null);
-      } catch (e: any) {
-        console.error("Error fetching dashboard data:", e);
-        setStats(null);
-        setError("Failed to load live data. Please check your network or server.");
-      } finally {
-        setLoading(false);
+        resolvedStats = await response.json();
+      } catch (apiError) {
+        console.warn("Dashboard stats API unavailable, falling back to local data:", apiError);
+        resolvedStats = buildFallbackDashboardStats();
+      }
+
+      setStats(resolvedStats);
+      setError(null);
+
+      try {
+        const { count } = await fetchPendingActivationUsers(database);
+        setDeactivatedCount(count);
+      } catch (pendingError) {
+        console.warn("Error loading pending activations:", pendingError);
+        setDeactivatedCount(0);
       }
     };
-    
-    // ⚠️ FETCHING ADMIN NAME AND DASHBOARD STATS ⚠️
+
     const authInstance = sharedAuth || getAuth(sharedApp);
     const unsubscribe = onAuthStateChanged(authInstance, (user) => {
       if (user) {
-        // User is signed in, fetch data
-        fetchDashboardData(user.uid);
+        setLoading(true);
+        fetchDashboardData(user.uid, dbInstance)
+          .catch((unexpectedError) => {
+            console.error("Unexpected dashboard data failure:", unexpectedError);
+            setStats(buildFallbackDashboardStats());
+            setError(null);
+          })
+          .finally(() => {
+            setLoading(false);
+          });
       } else {
-        // User is signed out
         setLoading(false);
         setError("User not authenticated.");
       }
     });
 
-    // Cleanup function
     return () => unsubscribe();
   }, []);
 
@@ -297,7 +343,7 @@ export default function Dashboard() {
               {/* Streak Break Alert - Text updated as requested */}
               <div className="flex items-center gap-3 p-3 rounded-xl border border-red-300 bg-red-50 text-sm">
                 <img src={redheart} alt="Streak break icon" className="w-5 h-5" />
-                <p>Deactive Participants detected.</p>
+                <p>{deactivatedCount} Deactivated Participants detected</p>
               </div>
               {/* Milestone Alert */}
               <div className="flex items-center gap-3 p-3 rounded-xl border border-green-300 bg-green-50 text-sm">
