@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, updateDoc, setDoc, getDoc } from 'firebase/firestore';
+import { getFirestore, doc, updateDoc, setDoc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { app as sharedApp, db as sharedDb, auth as sharedAuth } from "@/firebase";
 import { format } from "date-fns";
 import { User } from 'firebase/auth';
@@ -238,6 +238,61 @@ useEffect(() => {
     setStressLevels(weeklyLevels);
   }, [progressActivities]);
 
+  // Auto-create access requests when specific progress milestones are completed
+  useEffect(() => {
+    const createRequests = async () => {
+      if (!firebase || !user?.uid) return;
+      try {
+        const userActivityRef = doc(firebase.db, 'userActivity', user.uid);
+        const snap = await getDoc(userActivityRef);
+        const data: any = snap && snap.exists() ? snap.data() : {};
+
+        // Helper to check and create a request for a given segment
+        const maybeRequest = async (segmentKey: string, reason: string) => {
+          const segField = segmentKey === 'day1_13' ? 'segment1' : 'segment2';
+          const approvedField = segmentKey === 'day1_13' ? 'IsSeg1Approved' : 'IsSeg2Approved';
+          const requestedAt = data?.[segField]?.requestedAt;
+          const isApproved = !!data?.[segField]?.[approvedField] || (segmentKey === 'day14_28' && (!!data?.segment2?.IsSeg2Approved || !!data?.segment2?.IsSeg3Approved));
+
+          if (isApproved) return; // already approved
+          if (requestedAt) return; // already requested
+
+          // Create activity request
+          const activitiesRef = collection(firebase.db, 'activities');
+          await addDoc(activitiesRef, {
+            userId: user.uid,
+            type: 'access_request',
+            segmentKey,
+            message: `Requested access to ${reason}`,
+            userName: user?.fullName || user?.name || '',
+            timestamp: serverTimestamp(),
+          });
+
+          // Mark requestedAt to avoid duplicates
+          const updateObj: any = {};
+          updateObj[`${segField}.requestedAt`] = serverTimestamp();
+          await updateDoc(userActivityRef, updateObj);
+        };
+
+        // Check for day0 completion -> request day1_13
+        const hasCompletedDay0 = progressActivities.some(([key, val]) => key === 'day0' && (val.status ?? '').toLowerCase() === 'completed');
+        if (hasCompletedDay0) {
+          await maybeRequest('day1_13', 'Day 1 - 13');
+        }
+
+        // Check for day13 completion -> request day14_28
+        const hasCompletedDay13 = progressActivities.some(([key, val]) => key === 'day13' && (val.status ?? '').toLowerCase() === 'completed');
+        if (hasCompletedDay13) {
+          await maybeRequest('day14_28', 'Day 14 - 28');
+        }
+      } catch (err) {
+        console.error('Failed to auto-create access requests', err);
+      }
+    };
+
+    createRequests();
+  }, [progressActivities, firebase, user?.uid]);
+
   const handleUpdateAccess = async () => {
     if (!user?.uid || !firebase) {
       console.error("User or Firebase not found.");
@@ -287,7 +342,7 @@ useEffect(() => {
     }
   };
 
-  const handleSegmentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSegmentChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = event.target;
     if (name === 'day0') {
       return; // Day 0 is always true and not toggleable
@@ -306,7 +361,9 @@ useEffect(() => {
         newState.day14_28 = false;
       }
     }
+
     setSegmentAccess(newState);
+
   };
 
   const getDayNumber = (dayKey: string): string => {

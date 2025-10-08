@@ -25,6 +25,8 @@ export default function ProfileHeader({
   const [modalOpen, setModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [reportProgress, setReportProgress] = useState<number | null>(null);
+  const [avgStress, setAvgStress] = useState<number | null>(null);
+  const [listeningHours, setListeningHours] = useState<number | null>(null);
 
   // State to hold the current active status.
   const [isActive, setIsActive] = useState<boolean | null>(null);
@@ -54,6 +56,72 @@ export default function ProfileHeader({
       }
     };
     loadProgress();
+    return () => { mounted = false; };
+  }, [user?.uid]);
+
+  // Fetch progress from userActivity/{uid}/report subcollection
+  useEffect(() => {
+    let mounted = true;
+    const loadProgress = async () => {
+      try {
+        const uid = user?.uid || user?.id;
+        if (!uid) { if (mounted) setReportProgress(null); return; }
+        const snaps = await getDocs(collection(db, 'userActivity', uid, 'report'));
+        if (snaps.empty) { if (mounted) setReportProgress(null); return; }
+        let best = snaps.docs[0];
+        const toMs = (v: any) => (v?.toMillis ? v.toMillis() : (typeof v === 'string' || v instanceof Date) ? new Date(v).getTime() : 0);
+        for (const d of snaps.docs) {
+          const ca = (d.data() as any)?.createdAt ?? null;
+          const bestCa = (best.data() as any)?.createdAt ?? null;
+          if (toMs(ca) > toMs(bestCa)) best = d;
+        }
+        const dta = (best.data() as any);
+        const prog = typeof dta?.progress === 'number' ? dta.progress : (typeof dta?.Progress === 'number' ? dta.Progress : undefined);
+        if (mounted) setReportProgress(typeof prog === 'number' ? Math.max(0, Math.min(100, Math.round(prog))) : null);
+      } catch {
+        if (mounted) setReportProgress(null);
+      }
+    };
+    loadProgress();
+    return () => { mounted = false; };
+  }, [user?.uid]);
+
+  // Derive Avg Stress and Total Listening from userActivity.progress
+  useEffect(() => {
+    let mounted = true;
+    const mapRatingToNumber = (ratingText?: string): number => {
+      const r = (ratingText || '').toLowerCase();
+      switch (r) {
+        case 'very good': return 5;
+        case 'good': return 4;
+        case 'okay': return 3;
+        case 'bad': return 2;
+        case 'very bad': return 1;
+        default: return 0;
+      }
+    };
+    const load = async () => {
+      try {
+        const uid = user?.uid || user?.id;
+        if (!uid) { if (mounted) { setAvgStress(null); setListeningHours(null); } return; }
+        const uaSnap = await getDoc(doc(db, 'userActivity', uid));
+        if (!uaSnap.exists()) { if (mounted) { setAvgStress(null); setListeningHours(null); } return; }
+        const data: any = uaSnap.data();
+        const progress = data?.progress || {};
+        const entries = Object.values(progress) as any[];
+        const moods: number[] = entries.map(e => mapRatingToNumber(e?.rating2)).filter(n => n > 0);
+        const avg = moods.length ? (moods.reduce((a, b) => a + b, 0) / moods.length) : 0;
+        const completed = entries.filter(e => String(e?.status || '').toLowerCase() === 'completed').length;
+        const minutes = completed * 45;
+        if (mounted) {
+          setAvgStress(Number(avg.toFixed(1)));
+          setListeningHours(Number((minutes / 60).toFixed(1)));
+        }
+      } catch {
+        if (mounted) { setAvgStress(null); setListeningHours(null); }
+      }
+    };
+    load();
     return () => { mounted = false; };
   }, [user?.uid]);
 
@@ -270,8 +338,28 @@ export default function ProfileHeader({
 
     setLoading(true);
     try {
-      await deleteDoc(doc(db, "users", user.uid));
-      if (onDelete) onDelete(user.uid);
+      const uid = user.uid;
+      // Delete from allocated collections if present
+      const maybeDelete = async (path: [string, string]) => {
+        const ref = doc(db, path[0], path[1]);
+        const snap = await getDoc(ref);
+        if (snap.exists()) await deleteDoc(ref);
+      };
+      // Clean userActivity/report subcollection first
+      const reportCol = collection(db, 'userActivity', uid, 'report');
+      const reportSnaps = await getDocs(reportCol);
+      await Promise.all(reportSnaps.docs.map(d => deleteDoc(d.ref)));
+      await maybeDelete(['userActivity', uid]);
+
+      // Other common allocations
+      await maybeDelete(['userProfiles', uid]).catch(()=>{});
+      await maybeDelete(['mobile_users', uid]).catch(()=>{});
+      await maybeDelete(['activities', uid]).catch(()=>{});
+      await maybeDelete(['notifications', uid]).catch(()=>{});
+
+      // Finally, delete the primary users doc
+      await deleteDoc(doc(db, "users", uid));
+      if (onDelete) onDelete(uid);
       navigate("/participants");
     } catch (error) {
       console.error("Error deleting user:", error);
@@ -353,7 +441,7 @@ export default function ProfileHeader({
         <div className="bg-white rounded-xl shadow-md p-5 flex flex-col justify-between">
           <div className="flex justify-between items-center">
             <div className="flex flex-col">
-              <div className="text-4xl font-bold" style={{ color: '#EB5757' }}>3.2/5</div>
+              <div className="text-4xl font-bold" style={{ color: '#EB5757' }}>{avgStress !== null ? `${avgStress}/5` : '0/5'}</div>
               <div className="text-gray-500 text-sm mt-2">Avg Stress level</div>
             </div>
             <img src={HeartIcon} alt="Stress" className="w-10 h-10" />
@@ -362,7 +450,7 @@ export default function ProfileHeader({
         <div className="bg-white rounded-xl shadow-md p-5 flex flex-col justify-between">
           <div className="flex justify-between items-center">
             <div className="flex flex-col">
-              <div className="text-4xl font-bold" style={{ color: '#4C4CFF' }}>8.5 hrs</div>
+              <div className="text-4xl font-bold" style={{ color: '#4C4CFF' }}>{listeningHours !== null ? `${listeningHours} hrs` : '0 hrs'}</div>
               <div className="text-gray-500 text-sm mt-2">Total listening</div>
             </div>
             <img src={PlayIcon} alt="Listening" className="w-10 h-10" />

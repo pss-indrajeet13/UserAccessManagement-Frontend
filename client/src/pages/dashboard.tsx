@@ -16,10 +16,11 @@ import Header from "@/components/layout/header";
 
 // ⚠️ NEW IMPORTS FOR FIREBASE ⚠️
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, getDoc, type Firestore } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, type Firestore, collection, collectionGroup, query, where, orderBy, limit as fblimit, onSnapshot } from 'firebase/firestore';
 import { app as sharedApp, db as sharedDb, auth as sharedAuth } from "@/firebase";
 import { fetchPendingActivationUsers } from "@/lib/pendingActivation";
 import { getAllUsers } from "@/lib/fallbackData";
+import { Link } from "wouter";
 
 interface DashboardStats {
   totalUsers: number;
@@ -29,12 +30,22 @@ interface DashboardStats {
   // chaptersUnlockedToday removed
   overallProgress: number;
   inactiveForDays: number;
-  streakBreaks: number;
+  // streakBreaks: number;
   milestones: number;
   meditationVideoUsers: number;
   incompleteSessions: number;
   journalsSubmitted: number;
 }
+
+type RecentJournal = {
+  id: string;
+  uid: string;
+  userName: string;
+  chapterName?: string | null;
+  journalDate?: Date | null;
+  excerpt?: string | null;
+  avatarUrl?: string | null;
+};
 
 function clampPercent(n: number) {
   if (!Number.isFinite(n)) return 0;
@@ -51,7 +62,7 @@ function buildFallbackDashboardStats(): DashboardStats {
   const moodScoreOutOfFive = Math.max(0, Math.min(5, averageScore / 20));
   const overallProgress = users.reduce((sum, user) => sum + (user.progress ?? 0), 0) / safeTotal;
   const inactiveForDays = users.filter((user) => user.status !== "active").length;
-  const streakBreaks = users.filter((user) => user.progress <= 25 || user.status !== "active").length;
+  // const streakBreaks = users.filter((user) => user.progress <= 25 || user.status !== "active").length;
   const milestones = users.filter((user) => user.progress >= 100).length;
   const meditationVideoUsers = users.filter((user) => user.progress >= 70).length;
   const incompleteSessions = users.filter((user) => user.progress < 40).length;
@@ -63,7 +74,7 @@ function buildFallbackDashboardStats(): DashboardStats {
     averageMoodScore: `${moodScoreOutOfFive.toFixed(1)}/5`,
     overallProgress: Math.round(overallProgress),
     inactiveForDays,
-    streakBreaks,
+    // streakBreaks,
     milestones,
     meditationVideoUsers,
     incompleteSessions,
@@ -77,10 +88,28 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   // ⚠️ NEW STATE FOR ADMIN NAME, using 'name' from your image ⚠️
   const [adminName, setAdminName] = useState("Admin");
-  const [deactivatedCount, setDeactivatedCount] = useState(0); 
+  const [deactivatedCount, setDeactivatedCount] = useState(0);
+  const [recentJournals, setRecentJournals] = useState<RecentJournal[]>([]); 
 
   useEffect(() => {
     const dbInstance = sharedDb || getFirestore(sharedApp);
+
+    const safeFetch = async (input: RequestInfo, init?: RequestInit) => {
+      try {
+        // Some third-party scripts (eg FullStory) may wrap window.fetch and cause unexpected sync throws.
+        // Wrap the call to ensure we always return a Promise that resolves to a Response-like object.
+        const res = await fetch(input, init);
+        return res;
+      } catch (err) {
+        console.warn("safeFetch: network request failed", err);
+        // Return a Response-like fallback so callers can handle non-ok responses uniformly
+        return {
+          ok: false,
+          status: 0,
+          json: async () => ({}),
+        } as unknown as Response;
+      }
+    };
 
     const fetchDashboardData = async (userId: string, database: Firestore) => {
       try {
@@ -99,9 +128,9 @@ export default function Dashboard() {
 
       let resolvedStats: DashboardStats;
       try {
-        const response = await fetch("/api/dashboard-stats", { cache: "no-store" });
-        if (!response.ok) {
-          throw new Error(`Server responded with status: ${response.status}`);
+        const response = await safeFetch("/api/dashboard-stats", { cache: "no-store" });
+        if (!response || !response.ok) {
+          throw new Error(`Server responded with status: ${response ? (response as any).status : 'network error'}`);
         }
         resolvedStats = await response.json();
       } catch (apiError) {
@@ -142,6 +171,62 @@ export default function Dashboard() {
 
     return () => unsubscribe();
   }, []);
+
+  // Live counts for alerts (users inactive for 7+ days and deactivated participants)
+  useEffect(() => {
+    const dbInstance = sharedDb || getFirestore(sharedApp);
+    const usersCol = collection(dbInstance, 'users');
+
+    // Listener for all users to compute inactiveForDays and total counts
+    const unsubscribeUsers = onSnapshot(usersCol, (snap) => {
+      try {
+        const now = new Date();
+        const sevenDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+
+        let inactiveCount = 0;
+        let totalUsers = snap.size;
+        let activeCount = 0;
+
+        snap.docs.forEach((docSnap) => {
+          const data: any = docSnap.data();
+          const lastActive = data?.lastActive || data?.lastSignIn || data?.lastLogin || data?.lastSeen || null;
+          const laDate = lastActive && typeof lastActive === 'object' && typeof lastActive.toDate === 'function' ? lastActive.toDate() : (lastActive ? new Date(lastActive) : null);
+          if (!laDate || laDate < sevenDaysAgo) {
+            inactiveCount++;
+          } else {
+            activeCount++;
+          }
+        });
+
+        setStats((prev) => {
+          const next = prev ? { ...prev } : { ...buildFallbackDashboardStats() };
+          next.inactiveForDays = inactiveCount;
+          next.totalUsers = totalUsers as any; // allow augmentation
+          next.totalActiveUsers = activeCount as any;
+          // also update journalsSubmitted from existing recentJournals state if available
+          next.journalsSubmitted = recentJournals.length;
+          return next;
+        });
+      } catch (err) {
+        console.warn('Failed to compute live user counts:', err);
+      }
+    });
+
+    // Listener for deactivated participants (status === false)
+    const deactQuery = query(collection(dbInstance, 'users'), where('status', '==', false));
+    const unsubscribeDeact = onSnapshot(deactQuery, (snap) => {
+      try {
+        setDeactivatedCount(snap.size);
+      } catch (err) {
+        console.warn('Failed to compute deactivated count:', err);
+      }
+    });
+
+    return () => {
+      unsubscribeUsers();
+      unsubscribeDeact();
+    };
+  }, [recentJournals]);
 
   const progress = clampPercent(stats?.overallProgress ?? 0);
   const circumference = 283;
@@ -270,9 +355,9 @@ export default function Dashboard() {
                   </CardTitle>
                   <p className="text-sm text-gray-500">Today's activity summary</p>
                 </div>
-                <button className="px-6 py-2 bg-gray-100 text-sm rounded-lg font-medium text-[#125566] hover:bg-gray-200">
+                {/* <button className="px-6 py-2 bg-gray-100 text-sm rounded-lg font-medium text-[#125566] hover:bg-gray-200">
                   View All
-                </button>
+                </button> */}
               </div>
             </CardHeader>
             <CardContent className="p-4 space-y-6">
@@ -329,9 +414,9 @@ export default function Dashboard() {
                     Important updates requiring attention
                   </p>
                 </div>
-                <button className="px-6 py-2 bg-gray-100 text-sm rounded-lg font-medium text-[#125566] hover:bg-gray-200">
+                {/* <button className="px-6 py-2 bg-gray-100 text-sm rounded-lg font-medium text-[#125566] hover:bg-gray-200">
                   View All
-                </button>
+                </button> */}
               </div>
             </CardHeader>
             <CardContent className="p-4 space-y-3">

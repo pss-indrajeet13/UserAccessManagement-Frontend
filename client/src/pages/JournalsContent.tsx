@@ -17,10 +17,222 @@ interface Journal {
   audioFileName?: string; // The file name in Storage
 }
 
-// A more complete Participant type
-type Participant = {
-  fullName: string;
-  // ... other fields
+// Participant details passed to ProfileHeader
+interface Participant {
+  uid: string;
+  id?: string;
+  fullName?: string | null;
+  email?: string | null;
+  progress?: number | null;
+  status?: boolean | null;
+  sectionProfile?: {
+    phoneNumber?: string | null;
+    [key: string]: unknown;
+  } | null;
+  phoneNumber?: string | null;
+  contactNumber?: string | null;
+  phone?: string | null;
+  [key: string]: unknown;
+}
+
+interface ProgressFeedbackEntry {
+  id: string;
+  label: string;
+  feedbackText: string;
+  secondaryTexts: string[];
+  updatedAtLabel: string | null;
+}
+
+type ProgressCollectionItem = {
+  entry: ProgressFeedbackEntry;
+  order: number;
+};
+
+const parseNumeric = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const match = value.match(/\d+/);
+    if (match) {
+      const num = parseInt(match[0], 10);
+      if (!Number.isNaN(num)) {
+        return num;
+      }
+    }
+  }
+  return null;
+};
+
+const getSortOrder = (identifier: string, data: Record<string, any>): number => {
+  const candidateKeys = ['dayNumber', 'dayIndex', 'day', 'step', 'sequence', 'order', 'position', 'index'];
+  for (const key of candidateKeys) {
+    const parsed = parseNumeric(data?.[key]);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+  const fromLabel = parseNumeric(data?.label);
+  if (fromLabel !== null) {
+    return fromLabel;
+  }
+  const fromId = parseNumeric(identifier);
+  return fromId !== null ? fromId : Number.MAX_SAFE_INTEGER;
+};
+
+const formatProgressLabel = (identifier: string, data: Record<string, any>): string => {
+  const candidateKeys = ['dayLabel', 'title', 'dayName', 'day', 'label', 'name'];
+  for (const key of candidateKeys) {
+    const raw = data?.[key];
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+  }
+  const match = identifier.match(/\d+/);
+  if (match) {
+    const num = parseInt(match[0], 10);
+    if (!Number.isNaN(num)) {
+      return `Day ${num}`;
+    }
+  }
+  const cleaned = identifier.replace(/[-_]+/g, ' ').trim();
+  if (cleaned) {
+    return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  }
+  return identifier;
+};
+
+const collectFeedbackTexts = (data: Record<string, any>): { primary: string; secondary: string[] } => {
+  const prioritizedKeys = [
+    'feedback',
+    'Feedback',
+    'coachFeedback',
+    'CoachFeedback',
+    'writtenFeedback',
+    'notes',
+    'Notes',
+    'comment',
+    'Comment',
+    'journalFeedback',
+    'JournalFeedback',
+  ];
+  const texts: string[] = [];
+  const pushText = (value: unknown) => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed) {
+        texts.push(trimmed);
+      }
+    }
+  };
+  prioritizedKeys.forEach((key) => pushText(data?.[key]));
+  Object.entries(data).forEach(([key, value]) => {
+    if (/feedback|note|comment|reflection|summary/i.test(key)) {
+      pushText(value);
+    }
+  });
+  const unique = Array.from(new Set(texts));
+  return {
+    primary: unique[0] ?? '',
+    secondary: unique.slice(1),
+  };
+};
+
+const toDateFromValue = (value: unknown): Date | null => {
+  if (!value) {
+    return null;
+  }
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === 'number') {
+    const fromNumber = new Date(value);
+    return Number.isNaN(fromNumber.getTime()) ? null : fromNumber;
+  }
+  if (typeof value === 'string') {
+    const fromString = new Date(value);
+    return Number.isNaN(fromString.getTime()) ? null : fromString;
+  }
+  if (typeof value === 'object') {
+    const maybe = value as { toDate?: () => Date; seconds?: number; nanoseconds?: number };
+    if (typeof maybe.toDate === 'function') {
+      const asDate = maybe.toDate();
+      return Number.isNaN(asDate.getTime()) ? null : asDate;
+    }
+    if (typeof maybe.seconds === 'number') {
+      const millis = maybe.seconds * 1000 + (typeof maybe.nanoseconds === 'number' ? maybe.nanoseconds / 1e6 : 0);
+      const fromSeconds = new Date(millis);
+      return Number.isNaN(fromSeconds.getTime()) ? null : fromSeconds;
+    }
+  }
+  return null;
+};
+
+const formatTimestampLabel = (value: unknown): string | null => {
+  const date = toDateFromValue(value);
+  if (!date) {
+    return null;
+  }
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+};
+
+const appendProgressEntries = (collector: ProgressCollectionItem[], identifier: string, raw: any): void => {
+  if (raw == null) {
+    return;
+  }
+  if (Array.isArray(raw)) {
+    raw.forEach((item, index) => {
+      appendProgressEntries(collector, `${identifier}-${index + 1}`, item);
+    });
+    return;
+  }
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      return;
+    }
+    collector.push({
+      entry: {
+        id: identifier,
+        label: formatProgressLabel(identifier, {}),
+        feedbackText: trimmed,
+        secondaryTexts: [],
+        updatedAtLabel: null,
+      },
+      order: getSortOrder(identifier, {}),
+    });
+    return;
+  }
+  if (typeof raw === 'object') {
+    const data = raw as Record<string, any>;
+    const { primary, secondary } = collectFeedbackTexts(data);
+    if (!primary) {
+      return;
+    }
+    const timestamp =
+      data.updatedAt ??
+      data.updated_at ??
+      data.modifiedAt ??
+      data.modified_at ??
+      data.completedAt ??
+      data.completed_at ??
+      data.createdAt ??
+      data.created_at ??
+      data.timestamp;
+    collector.push({
+      entry: {
+        id: identifier,
+        label: formatProgressLabel(identifier, data),
+        feedbackText: primary,
+        secondaryTexts: secondary,
+        updatedAtLabel: formatTimestampLabel(timestamp),
+      },
+      order: getSortOrder(identifier, data),
+    });
+  }
 };
 
 const JournalsContent = () => {
@@ -33,6 +245,8 @@ const JournalsContent = () => {
   const audioRef = React.useRef<HTMLAudioElement | null>(null); // Use a ref to control the audio element
   const [audioFiles, setAudioFiles] = useState<{ name: string; url: string; path: string }[]>([]);
   const [audioLoading, setAudioLoading] = useState<boolean>(false);
+  const [writtenFeedback, setWrittenFeedback] = useState<ProgressFeedbackEntry[]>([]);
+  const [writtenFeedbackLoading, setWrittenFeedbackLoading] = useState<boolean>(false);
 
   useEffect(() => {
     if (!uid) {
@@ -47,7 +261,8 @@ const JournalsContent = () => {
         const participantDocRef = doc(db, "users", uid);
         const participantDoc = await getDoc(participantDocRef);
         if (participantDoc.exists()) {
-          setParticipant(participantDoc.data() as Participant);
+          const participantData = participantDoc.data() as Record<string, unknown>;
+          setParticipant({ uid, id: uid, ...participantData } as Participant);
         } else {
           setParticipant(null);
           setLoading(false);
@@ -165,6 +380,67 @@ const JournalsContent = () => {
     );
   }, [audioFiles, journals.length]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadWrittenFeedback = async () => {
+      if (!uid) {
+        if (!cancelled) {
+          setWrittenFeedback([]);
+          setWrittenFeedbackLoading(false);
+        }
+        return;
+      }
+      setWrittenFeedbackLoading(true);
+      try {
+        const collected: ProgressCollectionItem[] = [];
+        try {
+          const progressCollection = collection(db, 'userActivity', uid, 'progress');
+          const progressSnap = await getDocs(progressCollection);
+          if (!progressSnap.empty) {
+            progressSnap.forEach((docSnap) => {
+              appendProgressEntries(collected, docSnap.id, docSnap.data());
+            });
+          }
+        } catch (error) {
+          console.warn('Failed to fetch progress subcollection:', error);
+        }
+        if (!collected.length) {
+          try {
+            const activityDoc = await getDoc(doc(db, 'userActivity', uid));
+            if (activityDoc.exists()) {
+              const data = activityDoc.data() as Record<string, any> | undefined;
+              const progress = data?.progress;
+              if (progress && typeof progress === 'object') {
+                Object.entries(progress).forEach(([key, value]) => {
+                  appendProgressEntries(collected, key, value);
+                });
+              }
+            }
+          } catch (activityError) {
+            console.warn('Failed to fetch userActivity document for feedback:', activityError);
+          }
+        }
+        collected.sort((a, b) => a.order - b.order);
+        if (!cancelled) {
+          setWrittenFeedback(collected.map((item) => item.entry));
+        }
+      } catch (error) {
+        console.error('Failed to load written feedback:', error);
+        if (!cancelled) {
+          setWrittenFeedback([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setWrittenFeedbackLoading(false);
+        }
+      }
+    };
+    loadWrittenFeedback();
+    return () => {
+      cancelled = true;
+    };
+  }, [uid]);
+
   // Fetch audio feedback files for this user
   useEffect(() => {
     let cancelled = false;
@@ -227,26 +503,60 @@ const JournalsContent = () => {
       <ParticipantProfileTabs />
       <div className="max-w-7xl mx-auto px-6 p-6">
         <ProfileHeader user={participant} />
-        <div className="bg-white rounded-xl shadow-md p-5 mt-6">
-          <div className="pb-2 border-b" style={{ borderColor: "#125566" }}>
-            <h2 className="font-semibold mb-2 text-xl" style={{ color: '#125566' }}>Audio Feedback</h2>
-            <p className="text-gray-500 mb-4">Voice notes and feedback stored in Firebase Storage</p>
-          </div>
-          <div className="space-y-4">
-            {audioLoading ? (
-              <div className="text-gray-500">Loading audio...</div>
-            ) : audioFiles.length > 0 ? (
-              audioFiles.map((file) => (
-                <div key={file.path} className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
-                  <div className="flex-1 mr-4">
-                    <div className="text-sm text-gray-700 truncate">{file.name}</div>
-                    <audio src={file.url} controls className="w-full mt-2" />
+        <div className="space-y-6 mt-6">
+          <div className="bg-white rounded-xl shadow-md p-5">
+            <div className="pb-2 border-b" style={{ borderColor: "#125566" }}>
+              <h2 className="font-semibold mb-2 text-xl" style={{ color: '#125566' }}>Audio Feedback</h2>
+              <p className="text-gray-500 mb-4">Voice notes and feedback stored in Firebase Storage</p>
+            </div>
+            <div className="space-y-4">
+              {audioLoading ? (
+                <div className="text-gray-500">Loading audio...</div>
+              ) : audioFiles.length > 0 ? (
+                audioFiles.map((file) => (
+                  <div key={file.path} className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
+                    <div className="flex-1 mr-4">
+                      <div className="text-sm text-gray-700 truncate">{file.name}</div>
+                      <audio src={file.url} controls className="w-full mt-2" />
+                    </div>
                   </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-gray-500">No audio feedback files found.</div>
-            )}
+                ))
+              ) : (
+                <div className="text-gray-500">No audio feedback files found.</div>
+              )}
+            </div>
+          </div>
+          <div className="bg-white rounded-xl shadow-md p-5">
+            <div className="pb-2 border-b" style={{ borderColor: "#125566" }}>
+              <h2 className="font-semibold mb-2 text-xl" style={{ color: '#125566' }}>Written Feedback</h2>
+              <p className="text-gray-500 mb-4">Feedback captured within the progress tracker</p>
+            </div>
+            <div className="space-y-4">
+              {writtenFeedbackLoading ? (
+                <div className="text-gray-500">Loading feedback...</div>
+              ) : writtenFeedback.length > 0 ? (
+                writtenFeedback.map((entry) => (
+                  <div key={entry.id} className="bg-gray-50 rounded-lg p-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-700">{entry.label}</div>
+                        {entry.updatedAtLabel && (
+                          <div className="text-xs text-gray-500 mt-1">{entry.updatedAtLabel}</div>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-700 mt-3 whitespace-pre-wrap">{entry.feedbackText}</p>
+                    {entry.secondaryTexts.map((text, index) => (
+                      <p key={`${entry.id}-extra-${index}`} className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">
+                        {text}
+                      </p>
+                    ))}
+                  </div>
+                ))
+              ) : (
+                <div className="text-gray-500">No written feedback available.</div>
+              )}
+            </div>
           </div>
         </div>
       </div>

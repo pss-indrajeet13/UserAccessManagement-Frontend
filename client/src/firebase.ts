@@ -10,7 +10,7 @@ import { getStorage } from 'firebase/storage';
 //   projectId: "fertiwell-72814",
 //   storageBucket: "fertiwell-72814.firebasestorage.app",
 //   messagingSenderId: "103581622326",
-//   appId: "1:103581622326:web:your-app-id-here"
+//   appId: "1:103581622326:android:a5f3a9f2f1a24dd117f897"
 // };
 
 const firebaseConfig = {
