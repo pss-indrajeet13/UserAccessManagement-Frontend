@@ -7,14 +7,16 @@ import { Link } from "wouter"; // `Link` component from Wouter for client-side n
 // Defines the props for the Header component.
 // `title` and `subtitle` are strings for display.
 // `onAddUser` is an optional function to handle adding a new user.
+// `hasNotifications` is an optional boolean to indicate if there are unread notifications (shows red dot on bell).
 interface HeaderProps {
   title: string;
   subtitle: string;
   onAddUser?: () => void;
+  hasNotifications?: boolean;
 }
 
 // The Header component. It receives props to customize its content.
-export default function Header({ title, subtitle, onAddUser }: HeaderProps) {
+export default function Header({ title, subtitle, onAddUser, hasNotifications = false }: HeaderProps) {
   return (
     // The main header element, styled with a light background and a subtle shadow.
     <header className="bg-white shadow-sm border-b border-gray-200">
@@ -32,10 +34,16 @@ export default function Header({ title, subtitle, onAddUser }: HeaderProps) {
         <div className="flex items-center space-x-4">
           {/* A `Link` from Wouter that wraps the notifications button. Clicking this will navigate to the `/notifications` route. */}
           <Link href="/notifications">
-            <Button className="p-2 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200">
-              {/* Bell icon from `lucide-react`. */}
-              <Bell className="h-5 w-5" />
-            </Button>
+            <div className="relative">
+              <Button className="p-2 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200">
+                {/* Bell icon from `lucide-react`. */}
+                <Bell className="h-5 w-5" />
+              </Button>
+              {/* Red dot indicator for unread notifications */}
+              {hasNotifications && (
+                <span className="absolute -top-1 -right-1 block h-3 w-3 rounded-full bg-red-600 ring-2 ring-white" />
+              )}
+            </div>
           </Link>
 
           {/* A `Link` from Wouter that wraps the user's profile image. Clicking this will navigate to the `/profile` route. */}

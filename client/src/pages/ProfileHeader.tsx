@@ -10,6 +10,8 @@ import HeartIcon from '../Assets/Participant-header/heart.png';
 import PlayIcon from '../Assets/Participant-header/play.png';
 import YogaIcon from '../Assets/Participant-header/yoga.png';
 import ConfirmModal from "./ConfirmModal";
+import { toast } from "@/hooks/use-toast";
+import { normalizeUserStatus } from "@/lib/utils";
 
 export default function ProfileHeader({
   user,
@@ -31,33 +33,6 @@ export default function ProfileHeader({
   // State to hold the current active status.
   const [isActive, setIsActive] = useState<boolean | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
-
-  // Fetch progress from userActivity/{uid}/report subcollection
-  useEffect(() => {
-    let mounted = true;
-    const loadProgress = async () => {
-      try {
-        const uid = user?.uid || user?.id;
-        if (!uid) { if (mounted) setReportProgress(null); return; }
-        const snaps = await getDocs(collection(db, 'userActivity', uid, 'report'));
-        if (snaps.empty) { if (mounted) setReportProgress(null); return; }
-        let best = snaps.docs[0];
-        const toMs = (v: any) => (v?.toMillis ? v.toMillis() : (typeof v === 'string' || v instanceof Date) ? new Date(v).getTime() : 0);
-        for (const d of snaps.docs) {
-          const ca = (d.data() as any)?.createdAt ?? null;
-          const bestCa = (best.data() as any)?.createdAt ?? null;
-          if (toMs(ca) > toMs(bestCa)) best = d;
-        }
-        const dta = (best.data() as any);
-        const prog = typeof dta?.progress === 'number' ? dta.progress : (typeof dta?.Progress === 'number' ? dta.Progress : undefined);
-        if (mounted) setReportProgress(typeof prog === 'number' ? Math.max(0, Math.min(100, Math.round(prog))) : null);
-      } catch {
-        if (mounted) setReportProgress(null);
-      }
-    };
-    loadProgress();
-    return () => { mounted = false; };
-  }, [user?.uid]);
 
   // Fetch progress from userActivity/{uid}/report subcollection
   useEffect(() => {
@@ -129,8 +104,8 @@ export default function ProfileHeader({
   useEffect(() => {
     console.log('useEffect triggered for user change'); // Debug: Confirm effect runs
     console.log('user in useEffect:', user); // Debug: Inspect user in effect
-    console.log('user.hasOwnProperty("status"):', user?.hasOwnProperty('status')); // Debug: Check property existence
-    console.log('user.status value:', user?.status, 'type:', typeof user?.status); // Debug: Check value and type
+    console.log('user.hasOwnProperty("userStatus"):', user?.hasOwnProperty('userStatus')); // Debug: Check property existence
+    console.log('user.userStatus value:', user?.userStatus, 'type:', typeof user?.userStatus); // Debug: Check value and type
     let mounted = true;
     const safeSet = (v: boolean | null) => { if (mounted) setIsActive(v); };
 
@@ -146,11 +121,11 @@ export default function ProfileHeader({
       return () => { mounted = false; };
     }
 
-    // If status exists on the incoming object, use it immediately
-    if (typeof user.status !== 'undefined') {
-      console.log("user.hasOwnProperty(\"status\"):", user.hasOwnProperty("status"));
-      console.log("user.status value:", user.status, "type:", typeof user.status);
-      safeSet(Boolean(user.status));
+    // If userStatus exists on the incoming object, use it immediately
+    if (typeof user.userStatus !== 'undefined') {
+      console.log("user.hasOwnProperty(\"userStatus\"):", user.hasOwnProperty("userStatus"));
+      console.log("user.userStatus value:", user.userStatus, "type:", typeof user.userStatus);
+      safeSet(Boolean(user.userStatus));
       return () => { mounted = false; };
     }
 
@@ -166,8 +141,8 @@ export default function ProfileHeader({
           const snap = await getDoc(ref);
           if (snap.exists()) {
             const data = snap.data();
-            if (typeof data?.status !== "undefined") {
-              safeSet(Boolean(data.status));
+            if (typeof data?.userStatus !== "undefined") {
+              safeSet(Boolean(data.userStatus));
               return;
             }
           }
@@ -179,7 +154,7 @@ export default function ProfileHeader({
           const snaps = await getDocs(q);
           if (!snaps.empty) {
             const first = snaps.docs[0].data();
-            safeSet(typeof first?.status !== "undefined" ? Boolean(first.status) : false);
+            safeSet(typeof first?.userStatus !== "undefined" ? Boolean(first.userStatus) : false);
             return;
           }
         }
@@ -188,7 +163,7 @@ export default function ProfileHeader({
           const snaps2 = await getDocs(q2);
           if (!snaps2.empty) {
             const first = snaps2.docs[0].data();
-            safeSet(typeof first?.status !== "undefined" ? Boolean(first.status) : false);
+            safeSet(typeof first?.userStatus !== "undefined" ? Boolean(first.userStatus) : false);
             return;
           }
         }
@@ -237,9 +212,9 @@ export default function ProfileHeader({
       const targetRef = doc(db, "users", uidToUpdate);
       const targetSnap = await getDoc(targetRef);
       if (targetSnap.exists()) {
-        await updateDoc(targetRef, { status: newStatus });
+        await updateDoc(targetRef, { userStatus: newStatus });
       } else {
-        await setDoc(targetRef, { status: newStatus, email: user?.email || null, fullName: user?.fullName || null }, { merge: true });
+        await setDoc(targetRef, { userStatus: newStatus, email: user?.email || null, fullName: user?.fullName || null }, { merge: true });
       }
       console.log("User status updated for uid:", uidToUpdate);
     } catch (err) {
@@ -253,76 +228,41 @@ export default function ProfileHeader({
 
   console.log('Current isActive state:', isActive); // Debug: Verify state updates
 
-  // const handleToggleActive = async () => {
-  //   // Determine uid from common locations in your user object
-  //   const uid =
-  //     user?.uid ||
-  //     user?.sectionProfile?.uid ||
-  //     user?.sectionProfile?.userId ||
-  //     user?.id;
-
-  //   if (!uid || isActive === null) {
-  //     console.error("User UID missing or status is not yet loaded.");
-  //     return;
-  //   }
-
-  //   const newStatus = !isActive;
-
-  //   // Optimistic UI update
-  //   setLoading(true);
-  //   setIsActive(newStatus);
-
-  //   try {
-  //     // Try to find the user's document in common collections and update the first match.
-  //     const collectionsToCheck = ["users", "userProfiles", "userActivity"];
-  //     let updated = false;
-
-  //     for (const col of collectionsToCheck) {
-  //       const ref = doc(db, col, uid);
-  //       const snap = await getDoc(ref);
-  //       if (snap.exists()) {
-  //         await updateDoc(ref, { status: newStatus });
-  //         console.log(`Updated status in collection '${col}' for uid ${uid}`);
-  //         updated = true;
-  //         break;
-  //       }
-  //     }
-
-  //     if (!updated) {
-  //       // If not found, optionally create/update in the 'users' collection.
-  //       const fallbackRef = doc(db, "users", uid);
-  //       await updateDoc(fallbackRef, { status: newStatus }).catch(async (err) => {
-  //         // If update failed because doc missing, create it
-  //         console.warn("Fallback update failed, creating user doc in 'users' collection.", err);
-  //         await setDoc(fallbackRef, { uid, status: newStatus }, { merge: true });
-  //       });
-  //       console.log(`Created/updated fallback 'users' doc for uid ${uid}`);
-  //     }
-  //   } catch (error) {
-  //     console.error("Error toggling user status:", error);
-  //     // Rollback optimistic update on error
-  //     setIsActive((prev) => !newStatus);
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
-
   const handleChatClick = () => {
     if (onChat) onChat();
 
-    // Coalesce phone number sources
-    const phoneNumber = user?.sectionProfile?.phoneNumber ||
+    // Collect possible phone sources
+    const rawPhone = user?.sectionProfile?.phoneNumber ||
       user?.phoneNumber ||
       user?.contactNumber ||
       user?.phone;
 
-    if (phoneNumber) {
-      const formattedNumber = phoneNumber.startsWith("+") ? phoneNumber : `+${phoneNumber}`;
-      const message = "Hello! I need to discuss your profile details.";
-      window.open(`https://wa.me/${formattedNumber}?text=${encodeURIComponent(message)}`, "_blank");
-    } else {
-      console.warn("Phone number not available for this user.");
+    if (!rawPhone) {
+      toast({ title: "Phone missing", description: "No mobile number saved for this user." });
+      return;
     }
+
+    // Remove all non-digits; WhatsApp expects E.164 digits without '+'
+    let digits = String(rawPhone).replace(/\D/g, "");
+
+    // If number looks local (e.g., 10 digits) and a default country code is configured, prefix it
+    const defaultCC = (import.meta.env.VITE_DEFAULT_WHATSAPP_CC || "").replace(/\D/g, "");
+    if (digits.length <= 11 && defaultCC) {
+      digits = `${defaultCC}${digits}`;
+    }
+
+    // Basic E.164 validation (10-15 digits after applying country code)
+    if (digits.length < 10 || digits.length > 15) {
+      toast({
+        title: "Invalid phone number",
+        description: "Save number in international format, e.g. +14155552671, or set VITE_DEFAULT_WHATSAPP_CC.",
+      });
+      return;
+    }
+
+    const message = "Hello! I need to discuss your profile details.";
+    const url = `https://api.whatsapp.com/send?phone=${digits}&text=${encodeURIComponent(message)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
   const handleDeleteClick = () => {

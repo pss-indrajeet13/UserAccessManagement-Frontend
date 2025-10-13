@@ -16,7 +16,7 @@ import Header from "@/components/layout/header";
 
 // ⚠️ NEW IMPORTS FOR FIREBASE ⚠️
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, getDoc, type Firestore, collection, collectionGroup, query, where, orderBy, limit as fblimit, onSnapshot } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, type Firestore, collection, collectionGroup, query, where, orderBy, limit as fblimit, onSnapshot, updateDoc, Timestamp, getDocs, writeBatch } from 'firebase/firestore';
 import { app as sharedApp, db as sharedDb, auth as sharedAuth } from "@/firebase";
 import { fetchPendingActivationUsers } from "@/lib/pendingActivation";
 import { getAllUsers } from "@/lib/fallbackData";
@@ -25,12 +25,9 @@ import { Link } from "wouter";
 interface DashboardStats {
   totalUsers: number;
   totalActiveUsers: number;
-  // averageStreakLength removed
   averageMoodScore: string;
-  // chaptersUnlockedToday removed
   overallProgress: number;
   inactiveForDays: number;
-  // streakBreaks: number;
   milestones: number;
   meditationVideoUsers: number;
   incompleteSessions: number;
@@ -61,8 +58,7 @@ function buildFallbackDashboardStats(): DashboardStats {
   const averageScore = users.reduce((sum, user) => sum + (user.score ?? 0), 0) / safeTotal;
   const moodScoreOutOfFive = Math.max(0, Math.min(5, averageScore / 20));
   const overallProgress = users.reduce((sum, user) => sum + (user.progress ?? 0), 0) / safeTotal;
-  const inactiveForDays = users.filter((user) => user.status !== "active").length;
-  // const streakBreaks = users.filter((user) => user.progress <= 25 || user.status !== "active").length;
+  const inactiveForDays = users.filter((user) => user.status === "inactive").length;
   const milestones = users.filter((user) => user.progress >= 100).length;
   const meditationVideoUsers = users.filter((user) => user.progress >= 70).length;
   const incompleteSessions = users.filter((user) => user.progress < 40).length;
@@ -74,12 +70,67 @@ function buildFallbackDashboardStats(): DashboardStats {
     averageMoodScore: `${moodScoreOutOfFive.toFixed(1)}/5`,
     overallProgress: Math.round(overallProgress),
     inactiveForDays,
-    // streakBreaks,
     milestones,
     meditationVideoUsers,
     incompleteSessions,
     journalsSubmitted,
   };
+}
+
+// ⚠️ UPDATED FUNCTION TO UPDATE USER STATUSES BASED ON LAST ACTIVE TIME ⚠️
+async function updateUserStatusesBasedOnActivity(database: Firestore) {
+  try {
+    const usersCol = collection(database, 'users');
+    const q = query(usersCol);
+    const querySnapshot = await getDocs(q);
+    const now = new Date();
+    const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
+
+    const batch = writeBatch(database);
+
+    for (const docSnap of querySnapshot.docs) {
+      const data: any = docSnap.data();
+      const userId = docSnap.id;
+
+      // Check for multiple possible timestamp fields
+      const lastActiveTimestamp = data?.lastSignIn || data?.lastActive || data?.lastLogin || data?.lastSeen;
+
+      let shouldBeInactive = true;
+      if (lastActiveTimestamp) {
+        // Convert Firestore Timestamp to Date object if needed
+        const lastActiveDate = typeof lastActiveTimestamp.toDate === 'function'
+          ? lastActiveTimestamp.toDate()
+          : new Date(lastActiveTimestamp);
+
+        const diff = now.getTime() - lastActiveDate.getTime();
+        shouldBeInactive = diff >= sevenDaysInMs;
+      } // else: no timestamp, treat as inactive
+
+      const currentStatus = data?.status || 'active';
+
+      // Only update if status needs to change
+      if (shouldBeInactive && currentStatus !== 'inactive') {
+        batch.update(doc(database, 'users', userId), {
+          status: 'inactive',
+          lastActive: Timestamp.now(),
+        });
+        console.log(`Updated user ${userId} to inactive due to 7+ days inactivity`);
+      } else if (!shouldBeInactive && currentStatus !== 'active') {
+        batch.update(doc(database, 'users', userId), {
+          status: 'active',
+          lastActive: Timestamp.now(),
+        });
+        console.log(`Updated user ${userId} to active`);
+      }
+    }
+
+    await batch.commit();
+    console.log(`Processed ${querySnapshot.size} user statuses based on activity.`);
+    return true;
+  } catch (error) {
+    console.error('Error updating user statuses:', error);
+    return false;
+  }
 }
 
 export default function Dashboard() {
@@ -89,7 +140,7 @@ export default function Dashboard() {
   // ⚠️ NEW STATE FOR ADMIN NAME, using 'name' from your image ⚠️
   const [adminName, setAdminName] = useState("Admin");
   const [deactivatedCount, setDeactivatedCount] = useState(0);
-  const [recentJournals, setRecentJournals] = useState<RecentJournal[]>([]); 
+  const [recentJournals, setRecentJournals] = useState<RecentJournal[]>([]);
 
   useEffect(() => {
     const dbInstance = sharedDb || getFirestore(sharedApp);
@@ -125,6 +176,9 @@ export default function Dashboard() {
       } catch (profileError) {
         console.warn("Unable to load admin profile information:", profileError);
       }
+
+      // ⚠️ UPDATED: Update statuses based on activity before fetching stats ⚠️
+      await updateUserStatusesBasedOnActivity(database);
 
       let resolvedStats: DashboardStats;
       try {
@@ -180,18 +234,15 @@ export default function Dashboard() {
     // Listener for all users to compute inactiveForDays and total counts
     const unsubscribeUsers = onSnapshot(usersCol, (snap) => {
       try {
-        const now = new Date();
-        const sevenDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
-
         let inactiveCount = 0;
         let totalUsers = snap.size;
         let activeCount = 0;
 
         snap.docs.forEach((docSnap) => {
           const data: any = docSnap.data();
-          const lastActive = data?.lastActive || data?.lastSignIn || data?.lastLogin || data?.lastSeen || null;
-          const laDate = lastActive && typeof lastActive === 'object' && typeof lastActive.toDate === 'function' ? lastActive.toDate() : (lastActive ? new Date(lastActive) : null);
-          if (!laDate || laDate < sevenDaysAgo) {
+          const currentStatus = data?.status || 'active';
+
+          if (currentStatus === 'inactive') {
             inactiveCount++;
           } else {
             activeCount++;
@@ -201,7 +252,7 @@ export default function Dashboard() {
         setStats((prev) => {
           const next = prev ? { ...prev } : { ...buildFallbackDashboardStats() };
           next.inactiveForDays = inactiveCount;
-          next.totalUsers = totalUsers as any; // allow augmentation
+          next.totalUsers = totalUsers as any;
           next.totalActiveUsers = activeCount as any;
           // also update journalsSubmitted from existing recentJournals state if available
           next.journalsSubmitted = recentJournals.length;
@@ -420,7 +471,7 @@ export default function Dashboard() {
               </div>
             </CardHeader>
             <CardContent className="p-4 space-y-3">
-              {/* Inactive Users Alert */}
+              {/* Inactive Users Alert - Now reflects updated statuses */}
               <div className="flex items-center gap-3 p-3 rounded-xl border border-yellow-300 bg-yellow-50 text-sm">
                 <img src={profilyellow} alt="Inactive icon" className="w-5 h-5" />
                 <p>{stats?.inactiveForDays ?? 0} participations inactive for 7+ days</p>

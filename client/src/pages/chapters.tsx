@@ -176,7 +176,7 @@ const Chapters: React.FC = () => {
           </div>
 
           {/* ✅ Card 3: Highest Drop-Off Point */}
-          <div className="bg-white rounded-lg shadow border border-gray-200">
+          {/* <div className="bg-white rounded-lg shadow border border-gray-200">
             <CardHeader
               className="pb-2 border-b"
               style={{ borderColor: "#125566" }}
@@ -196,7 +196,7 @@ const Chapters: React.FC = () => {
                 textColor="#000"
               />
             </div>
-          </div>
+          </div> */}
         </div>
 
         {/* Chapters Table */}
@@ -205,7 +205,7 @@ const Chapters: React.FC = () => {
             <h3 className="text-lg font-semibold text-[#1E4A5A]">
               Chapters List
             </h3>
-            <div className="space-x-2">
+            {/* <div className="space-x-2">
               <button className="px-4 py-2 bg-[#1E4A5A] text-white rounded">
                 All Sections
               </button>
@@ -215,42 +215,22 @@ const Chapters: React.FC = () => {
               <button className="px-4 py-2 bg-gray-200 text-[#1E4A5A] rounded">
                 Section-B
               </button>
-            </div>
+            </div> */}
           </div>
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-100 text-[#1E4A5A]">
                 <th className="p-2 text-left">Chapters</th>
-                <th className="p-2 text-left">Password</th>
-                <th className="p-2 text-left">Status</th>
                 <th className="p-2 text-left">Completion Rate</th>
                 <th className="p-2 text-left">Participants</th>
-                <th className="p-2 text-left">Avg Time</th>
-                <th className="p-2 text-left">Drop-off</th>
               </tr>
             </thead>
             <tbody>
               {chaptersData.map((chapter) => (
                 <tr key={chapter.id} className="border-b">
                   <td className="p-2">{chapter.name}</td>
-                  <td className="p-2">{chapter.id}</td>
-                  <td className="p-2">
-                    <span
-                      className={`px-2 py-1 rounded ${
-                        chapter.status === "Completed"
-                          ? "bg-green-100 text-green-800"
-                          : chapter.status === "Active"
-                          ? "bg-purple-100 text-purple-800"
-                          : "bg-yellow-100 text-yellow-800"
-                      }`}
-                    >
-                      {chapter.status}
-                    </span>
-                  </td>
                   <td className="p-2">{chapter.completionRate}</td>
                   <td className="p-2">{chapter.participants}</td>
-                  <td className="p-2">{chapter.avgTime}</td>
-                  <td className="p-2 text-red-500">{chapter.dropOff}</td>
                 </tr>
               ))}
             </tbody>

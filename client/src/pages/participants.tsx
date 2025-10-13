@@ -11,6 +11,7 @@ import OrangeIcon from '../Assets/Participants/orange.png';
 import { db } from "@/firebase";
 import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
 import { fetchPendingActivationUsers, type PendingActivationResult } from "@/lib/pendingActivation";
+import { normalizeUserStatus } from "@/lib/utils";
 
 const baseStats = [
   {
@@ -70,6 +71,7 @@ interface UserType {
   streak: number;
   chapterNo: number;
   progress: number;
+  userStatus?: boolean;
   IsSeg0Approved?: boolean;
   IsSeg1Approved?: boolean;
   IsSeg2Approved?: boolean;
@@ -122,6 +124,7 @@ const Participants: React.FC = () => {
               streak: Number(v?.streak ?? 0),
               chapterNo: Number(v?.chapterNo ?? 0),
               progress: Number(v?.progress ?? 0),
+              userStatus: normalizeUserStatus(v?.userStatus ?? v?.status),
               IsSeg0Approved: Boolean(v?.IsSeg0Approved ?? true),
               IsSeg1Approved: Boolean(v?.IsSeg1Approved ?? false),
               IsSeg2Approved: Boolean(v?.IsSeg2Approved ?? false),
@@ -131,7 +134,16 @@ const Participants: React.FC = () => {
           }).filter(u => u.role !== 'admin');
         }
 
-        const sortedData = participantData.sort((a: UserType, b: UserType) => {
+        const normalizedData = (participantData ?? []).map((user) => {
+          const raw: any = user;
+          const resolvedStatus = normalizeUserStatus(raw?.userStatus ?? raw?.status);
+          return {
+            ...user,
+            userStatus: typeof resolvedStatus === "boolean" ? resolvedStatus : undefined,
+          } as UserType;
+        });
+
+        const sortedData = [...normalizedData].sort((a: UserType, b: UserType) => {
           const dateA = a.lastSignIn ? new Date(a.lastSignIn).getTime() : 0;
           const dateB = b.lastSignIn ? new Date(b.lastSignIn).getTime() : 0;
           return dateB - dateA;
@@ -208,13 +220,18 @@ const Participants: React.FC = () => {
   }
 
   function getStatus(user: UserType, deactivated: Set<string> = deactivatedSet) {
-    // If admin deactivated from ProfileHeader, treat as Pending Activation
+    const explicitStatus = normalizeUserStatus(user.userStatus ?? (user as any)?.status);
+    if (explicitStatus === false) return "Pending";
+
     if (user.uid && deactivated.has(user.uid)) return "Pending";
     if (!user.lastSignIn) return "Inactive";
 
     const last = new Date(user.lastSignIn);
-    const now = new Date();
-    const diff = (now.getTime() - last.getTime()) / (1000 * 3600 * 24);
+    const lastTime = last.getTime();
+    if (!Number.isFinite(lastTime)) return "Inactive";
+
+    const now = Date.now();
+    const diff = (now - lastTime) / (1000 * 3600 * 24);
     if (diff < 7) return "Active";
     return "Inactive";
   }
@@ -384,9 +401,9 @@ const Participants: React.FC = () => {
               </option>
             ))}
           </select>
-          <button className="ml-auto bg-teal-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-teal-700 transition">
+          {/* <button className="ml-auto bg-teal-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-teal-700 transition">
             Export
-          </button>
+          </button> */}
         </div>
 
         <div className="bg-white rounded-xl shadow-md overflow-x-auto">
@@ -462,7 +479,10 @@ const Participants: React.FC = () => {
                   let permitted = true;
                   if (currentChapter >= 1 && currentChapter <= 13) permitted = Boolean(u.IsSeg1Approved);
                   if (currentChapter >= 14) permitted = Boolean(u.IsSeg2Approved || u.IsSeg3Approved);
-                  const status = deactivatedSet.has(u.uid) ? 'Pending' : (permitted ? 'Active' : 'Inactive');
+                  const explicitStatus = normalizeUserStatus(u.userStatus ?? (u as any)?.status);
+                  const status = (explicitStatus === false || deactivatedSet.has(u.uid))
+                    ? 'Pending'
+                    : (permitted ? 'Active' : 'Inactive');
 
                   return (
                     <tr key={u.uid} className="border-t hover:bg-gray-50 transition">

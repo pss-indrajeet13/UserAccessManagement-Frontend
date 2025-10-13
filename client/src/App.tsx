@@ -8,10 +8,8 @@ import Sidebar from "./components/layout/sidebar";
 // Pages
 import Login from "./pages/login";
 import Dashboard from "./pages/dashboard";
-import UserManagement from "./pages/user-management";
 import AccessControl from "./pages/access-control";
 import Notifications from "./pages/notifications";
-import Reports from "./pages/reports";
 import Chapters from "./pages/chapters";
 import Profile from "./pages/profile";
 import Participants from "./pages/participants";
@@ -25,14 +23,12 @@ import Demo0 from './pages/demographics/demo_0.tsx';
 import Demo13 from './pages/demographics/demo_13.tsx';
 import Demo28 from './pages/demographics/demo_28.tsx';
 import Privacy from './pages/privacy.tsx';
+import BlogPage from './pages/BlogPage.tsx';
 
 // Auth context
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { query } from "firebase/firestore";
 import { queryClient } from "./lib/queryClient.ts";
-import Day28Demographics from "./pages/demographics/demo_28.tsx";
-import Day13Demographics from "./pages/demographics/demo_13.tsx";
-import Day0Demographics from "./pages/demographics/demo_0.tsx";
 import { useRoute } from "wouter";
 
 // const [, params] = useRoute("/participants/:uid/:rest*");
@@ -81,14 +77,14 @@ function Router() {
 
         {/* Protected routes */}
         <Route path="/dashboard" component={() => <PrivateRoute component={Dashboard} />} />
-        <Route path="/users" component={() => <PrivateRoute component={UserManagement} />} />
+        {/* <Route path="/users" component={() => <PrivateRoute component={UserManagement} />} /> */}
         <Route path="/access" component={() => <PrivateRoute component={AccessControl} />} />
         <Route path="/notifications" component={() => <PrivateRoute component={Notifications} />} />
-        <Route path="/reports" component={() => <PrivateRoute component={Reports} />} />
         <Route path="/chapters" component={() => <PrivateRoute component={Chapters} />} />
         <Route path="/participants" component={() => <PrivateRoute component={Participants} />} />
         <Route path="/calendar" component={() => <PrivateRoute component={Calendar} />} />
         <Route path="/profile" component={() => <PrivateRoute component={Profile} />} />
+        <Route path="/blog" component={() => <PrivateRoute component={BlogPage} />} />
         {/* <Route path="/participants/:uid/demographics/day-0">
           <Day0Demographics uid={uid} key={`day0-${uid}`} />
         </Route> */}
