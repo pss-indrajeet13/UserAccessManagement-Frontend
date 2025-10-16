@@ -1,4 +1,3 @@
-// src/pages/OverviewContent.tsx
 import React, { useState, useEffect } from 'react';
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
@@ -6,6 +5,19 @@ import { getFirestore, doc, updateDoc, setDoc, getDoc, collection, addDoc, serve
 import { app as sharedApp, db as sharedDb, auth as sharedAuth } from "@/firebase";
 import { format } from "date-fns";
 import { User } from 'firebase/auth';
+import { Bar } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+
+// Register Chart.js components
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 // Interface for the progress data
 interface ProgressData {
@@ -70,8 +82,7 @@ const ConfirmModal = ({
             Cancel
           </button>
           <button
-            className={`px-4 py-2 rounded-lg text-white ${danger ? "bg-red-600 hover:bg-red-700" : "bg-yellow-500 hover:bg-yellow-600"
-              }`}
+            className={`px-4 py-2 rounded-lg text-white ${danger ? "bg-red-600 hover:bg-red-700" : "bg-yellow-500 hover:bg-yellow-600"}`}
             onClick={onConfirm}
             disabled={loading}
           >
@@ -168,31 +179,28 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
     fetchUserActivities();
   }, [firebase, user?.uid]);
 
-// Effect to filter the list for display
-useEffect(() => {
-  const completedList: [string, ProgressData][] = [];
-  let nextInProcess: [string, ProgressData] | null = null;
-  let foundInProcess = false;
+  // Effect to filter the list for display
+  useEffect(() => {
+    const completedList: [string, ProgressData][] = [];
+    let nextInProcess: [string, ProgressData] | null = null;
+    let foundInProcess = false;
 
-  progressActivities.forEach(activity => {
-    // Add nullish coalescing to safely access 'status'
-    const status = activity[1].status ?? ''; 
-    
-    // Now you can safely call toLowerCase()
-    if (status.toLowerCase() === 'completed') {
-      completedList.push(activity);
-    } else if (status.toLowerCase() === 'inprogress' && !foundInProcess) {
-      nextInProcess = activity;
-      foundInProcess = true;
+    progressActivities.forEach(activity => {
+      const status = activity[1].status ?? '';
+      if (status.toLowerCase() === 'completed') {
+        completedList.push(activity);
+      } else if (status.toLowerCase() === 'inprogress' && !foundInProcess) {
+        nextInProcess = activity;
+        foundInProcess = true;
+      }
+    });
+
+    if (nextInProcess) {
+      setDisplayedActivities([...completedList, nextInProcess]);
+    } else {
+      setDisplayedActivities(completedList);
     }
-  });
-
-  if (nextInProcess) {
-    setDisplayedActivities([...completedList, nextInProcess]);
-  } else {
-    setDisplayedActivities(completedList);
-  }
-}, [progressActivities]);
+  }, [progressActivities]);
 
   // Helper function to map rating text to a number
   const mapRatingToNumber = (ratingText: string | undefined): number => {
@@ -209,7 +217,7 @@ useEffect(() => {
       case 'very bad':
         return 1;
       default:
-        return 0; // Return 0 for 'N/A' or unrated
+        return 0;
     }
   };
 
@@ -218,23 +226,20 @@ useEffect(() => {
     const weeklyLevels: number[] = [];
     let currentWeekTotal = 0;
     let daysInWeek = 0;
-  
+
     progressActivities.forEach(([, activity], index) => {
-      // Use the helper function to get the numerical mood rating
       const moodRating = mapRatingToNumber(activity.rating2);
       currentWeekTotal += moodRating;
       daysInWeek++;
-  
-      // Check if it's the end of a week (7 days) or the last day
+
       if (daysInWeek === 7 || index === progressActivities.length - 1) {
         const averageRating = daysInWeek > 0 ? currentWeekTotal / daysInWeek : 0;
         weeklyLevels.push(averageRating);
-        // Reset for the next week
         currentWeekTotal = 0;
         daysInWeek = 0;
       }
     });
-  
+
     setStressLevels(weeklyLevels);
   }, [progressActivities]);
 
@@ -247,17 +252,14 @@ useEffect(() => {
         const snap = await getDoc(userActivityRef);
         const data: any = snap && snap.exists() ? snap.data() : {};
 
-        // Helper to check and create a request for a given segment
         const maybeRequest = async (segmentKey: string, reason: string) => {
           const segField = segmentKey === 'day1_13' ? 'segment1' : 'segment2';
           const approvedField = segmentKey === 'day1_13' ? 'IsSeg1Approved' : 'IsSeg2Approved';
           const requestedAt = data?.[segField]?.requestedAt;
           const isApproved = !!data?.[segField]?.[approvedField] || (segmentKey === 'day14_28' && (!!data?.segment2?.IsSeg2Approved || !!data?.segment2?.IsSeg3Approved));
 
-          if (isApproved) return; // already approved
-          if (requestedAt) return; // already requested
+          if (isApproved || requestedAt) return;
 
-          // Create activity request
           const activitiesRef = collection(firebase.db, 'activities');
           await addDoc(activitiesRef, {
             userId: user.uid,
@@ -268,19 +270,16 @@ useEffect(() => {
             timestamp: serverTimestamp(),
           });
 
-          // Mark requestedAt to avoid duplicates
           const updateObj: any = {};
           updateObj[`${segField}.requestedAt`] = serverTimestamp();
           await updateDoc(userActivityRef, updateObj);
         };
 
-        // Check for day0 completion -> request day1_13
         const hasCompletedDay0 = progressActivities.some(([key, val]) => key === 'day0' && (val.status ?? '').toLowerCase() === 'completed');
         if (hasCompletedDay0) {
           await maybeRequest('day1_13', 'Day 1 - 13');
         }
 
-        // Check for day13 completion -> request day14_28
         const hasCompletedDay13 = progressActivities.some(([key, val]) => key === 'day13' && (val.status ?? '').toLowerCase() === 'completed');
         if (hasCompletedDay13) {
           await maybeRequest('day14_28', 'Day 14 - 28');
@@ -345,7 +344,7 @@ useEffect(() => {
   const handleSegmentChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = event.target;
     if (name === 'day0') {
-      return; // Day 0 is always true and not toggleable
+      return;
     }
     let newState = { ...segmentAccess, [name]: checked } as typeof segmentAccess;
 
@@ -363,7 +362,6 @@ useEffect(() => {
     }
 
     setSegmentAccess(newState);
-
   };
 
   const getDayNumber = (dayKey: string): string => {
@@ -377,7 +375,6 @@ useEffect(() => {
 
   const getRating = (ratingValue: string | undefined): string => {
     if (!ratingValue) return '-';
-    // Return the number from the mapping
     const numericalRating = mapRatingToNumber(ratingValue);
     return `${numericalRating}/5`;
   };
@@ -393,13 +390,71 @@ useEffect(() => {
         return 'bg-gray-200';
     }
   };
-  
+
   const getHeatmapColor = (dayIndex: number): string => {
     const dayKey = `day${dayIndex}`;
     const activity = progressActivities.find(([key]) => key === dayKey);
     if (!activity) return 'bg-gray-200';
     const status = activity[1].status;
     return getStatusColor(status);
+  };
+
+  // Compute hasNotifications based on in-progress activities
+  const hasNotifications = progressActivities.some(([_, act]) => act.status.toLowerCase() === 'inprogress');
+
+  // Define barColors before chartData
+  const barColors = ['#EB5757', '#A78BFA', '#60A5FA', '#4FD1C5'];
+
+  // Chart data configuration for Stress Level Trends
+  const chartData = {
+    labels: stressLevels.map((_, i) => `Week ${i + 1}`),
+    datasets: [
+      {
+        label: 'Stress Level',
+        data: stressLevels,
+        backgroundColor: stressLevels.map((_, i) => barColors[i % barColors.length]),
+        borderRadius: 4,
+        maxBarThickness: 40,
+      },
+    ],
+  };
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false,
+      },
+      title: {
+        display: false,
+      },
+      tooltip: {
+        callbacks: {
+          label: (context: any) => `${context.parsed.y.toFixed(1)}/5`,
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: {
+          display: false,
+        },
+        title: {
+          display: false,
+        },
+      },
+      y: {
+        min: 0,
+        max: 5,
+        ticks: {
+          stepSize: 1,
+        },
+        grid: {
+          color: '#e5e7eb',
+        },
+      },
+    },
   };
 
   if (!user || !user.uid) {
@@ -409,9 +464,6 @@ useEffect(() => {
       </div>
     );
   }
-
-  // Define a color palette for the chart bars
-  const barColors = ['bg-[#EB5757]', 'bg-purple-400', 'bg-blue-400', 'bg-teal-400'];
 
   return (
     <>
@@ -433,7 +485,6 @@ useEffect(() => {
             />
             <label htmlFor="day0" className="text-gray-700">Day 0</label>
           </div>
-
           <div className="flex items-center space-x-2">
             <input
               type="checkbox"
@@ -482,8 +533,6 @@ useEffect(() => {
               </div>
             ))}
           </div>
-
-          {/* Color Indicators */}
           <div className="p-5 flex justify-center space-x-4">
             <div className="flex items-center space-x-1">
               <div className="w-3 h-3 rounded-sm bg-[#125566]"></div>
@@ -505,45 +554,16 @@ useEffect(() => {
             <h2 className="font-semibold" style={{ color: '#125566' }}>Stress Level Trends</h2>
             <p className="text-gray-500 mb-3">Weekly stress level progression</p>
           </div>
-          <div className="relative p-5 flex gap-4 items-end">
-            {/* Y-axis labels and grid lines */}
-            <div className="absolute left-0 bottom-0 top-0 text-gray-400 text-xs flex flex-col-reverse justify-between h-40 pb-2">
-              {[0, 1, 2, 3, 4, 5].map((level) => (
-                <div key={level} className="flex-1 flex items-end">
-                  {level}
-                </div>
-              ))}
-            </div>
-            <div className="absolute left-6 right-0 bottom-0 top-8 border-l border-gray-300">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="absolute w-full border-t border-gray-200" style={{ bottom: `${i * (100 / 5)}%` }}></div>
-              ))}
-            </div>
-
-            <div className="flex-grow flex justify-around gap-4 z-10">
-              {stressLevels.length > 0 ? (
-                stressLevels.map((val, i) => (
-                  <div key={i} className="flex flex-col items-center flex-1">
-                    <span className="text-sm font-semibold mb-1">{val.toFixed(1)}/5</span>
-                    {/* Outer two-tone bar (full height) */}
-                    <div className="w-10 rounded-t h-40 bg-gray-200 flex flex-col-reverse">
-                      {/* Inner color bar (dynamic height) */}
-                      <div
-                        className={`w-full rounded-t ${barColors[i % barColors.length] || 'bg-gray-400'}`}
-                        style={{ height: `${(val / 5) * 100}%` }}
-                      ></div>
-                    </div>
-                    <span className="text-sm mt-1">Week {i + 1}</span>
-                  </div>
-                ))
-              ) : (
-                <p className="absolute text-gray-500 text-center w-full top-1/2 -translate-y-1/2">No stress data available.</p>
-              )}
-            </div>
+          <div className="relative p-5" style={{ height: '200px' }}>
+            {stressLevels.length > 0 ? (
+              <Bar data={chartData} options={chartOptions} />
+            ) : (
+              <p className="absolute text-gray-500 text-center w-full top-1/2 -translate-y-1/2">No stress data available.</p>
+            )}
           </div>
         </div>
       </div>
-      
+
       <div className="bg-white rounded-xl shadow-md">
         <div className="p-5 pb-2 border-b" style={{ borderColor: "#125566" }}>
           <h2 className="font-semibold" style={{ color: '#125566' }}>Program Activity</h2>

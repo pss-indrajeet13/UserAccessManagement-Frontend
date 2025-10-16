@@ -163,9 +163,29 @@ const Participants: React.FC = () => {
 
         // Update cards using both sources
         const all = sortedData.length;
-        const active = sortedData.filter((u) => getStatus(u, ids) === "Active").length;
-        const inactive = sortedData.filter((u) => getStatus(u, ids) === "Inactive").length;
-        const pending = count;
+        const activeParticipants = sortedData.filter((u) => getStatus(u, ids) === "Active");
+        const inactiveParticipants = sortedData.filter((u) => getStatus(u, ids) === "Inactive");
+        const pendingParticipants = sortedData.filter((u) => getStatus(u, ids) === "Pending");
+        const active = activeParticipants.length;
+        const inactive = inactiveParticipants.length;
+        const pending = pendingParticipants.length;
+
+        // Print console logs to verify counts
+        console.log("Participants Page Counts:");
+        console.log("All Participants:", all);
+        console.log("Active Participants:", active);
+        console.log("Inactive Participants:", inactive);
+        console.log("Pending Activation:", pending);
+
+        // Log the names of each group
+        console.log("Active Participant Names:");
+        activeParticipants.forEach(u => console.log(getName(u)));
+
+        console.log("Inactive Participant Names:");
+        inactiveParticipants.forEach(u => console.log(getName(u)));
+
+        console.log("Pending Activation Names:");
+        pendingParticipants.forEach(u => console.log(getName(u)));
 
         setCards([
           { ...baseStats[0], value: all },
@@ -319,7 +339,7 @@ const Participants: React.FC = () => {
                 const rp = typeof dta?.progress === 'number' ? dta.progress : (typeof dta?.Progress === 'number' ? dta.Progress : undefined);
                 if (typeof rp === 'number') progressPct = Math.max(0, Math.min(100, Math.round(rp)));
               }
-            } catch {}
+            } catch { }
             return [u.uid, { chapter: currentChapter, progress: progressPct }] as [string, { chapter: number; progress: number }];
           } catch {
             return [u.uid, { chapter: 0, progress: u.progress ?? 0 }];
@@ -402,8 +422,8 @@ const Participants: React.FC = () => {
             ))}
           </select>
           {/* <button className="ml-auto bg-teal-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-teal-700 transition">
-            Export
-          </button> */}
+            Export
+          </button> */}
         </div>
 
         <div className="bg-white rounded-xl shadow-md overflow-x-auto">
@@ -510,7 +530,8 @@ const Participants: React.FC = () => {
                       </td>
                     </tr>
                   );
-                })}
+                }
+                )}
 
               {!loading && filtered.length === 0 && (
                 <tr>
