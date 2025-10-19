@@ -1,3 +1,5 @@
+// src/pages/OverviewContent.tsx
+
 import React, { useState, useEffect } from 'react';
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
@@ -106,11 +108,13 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
   const [displayedActivities, setDisplayedActivities] = useState<[string, ProgressData][]>([]);
   const [stressLevels, setStressLevels] = useState<number[]>([]);
 
-  // Initialize state with explicit default false for IsSeg0Approved
+  // Initialize state with explicit default false for access fields
   const [segmentAccess, setSegmentAccess] = useState({
     day0: true,
     day1_13: Boolean(user?.IsSeg1Approved ?? false),
     day14_28: Boolean((user?.IsSeg2Approved ?? false) || (user?.IsSeg3Approved ?? false)),
+    // 1. STATE MANAGEMENT: Initialize canViewBlogs from user prop
+    canViewBlogs: Boolean(user?.canViewBlogs ?? false),
   });
 
   // Ensure Firebase app/auth/db are available and set once on mount
@@ -129,13 +133,14 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
     init();
   }, []);
 
-  // Effect to update segmentAccess state whenever the user prop changes.
+  // 2. INITIALIZATION: Effect to update segmentAccess state whenever the user prop changes.
   useEffect(() => {
     if (user && user.uid) {
       setSegmentAccess({
         day0: true,
         day1_13: Boolean(user.IsSeg1Approved ?? false),
         day14_28: Boolean((user.IsSeg2Approved ?? false) || (user.IsSeg3Approved ?? false)),
+        canViewBlogs: Boolean(user.canViewBlogs ?? false), // Initialize new field
       });
       setComponentLoading(false);
     }
@@ -150,7 +155,7 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
         const snap = await getDoc(userActivityRef);
         if (snap.exists()) {
           const data: any = snap.data();
-          
+
           // Update segment access flags from userActivity
           const seg0 = data.segment0 || {};
           const seg1 = data.segment1 || {};
@@ -160,6 +165,9 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
             day0: true,
             day1_13: typeof seg1.IsSeg1Approved === 'boolean' ? seg1.IsSeg1Approved : prev.day1_13,
             day14_28: typeof seg2.IsSeg2Approved === 'boolean' ? seg2.IsSeg2Approved : prev.day14_28,
+            // Note: canViewBlogs is typically stored directly on the 'users' document, 
+            // but if it were in 'userActivity', you'd retrieve it here. 
+            // We rely on the 'users' doc for canViewBlogs, which is handled in the effect above.
           }));
 
           // Fetch and sort progress data
@@ -301,13 +309,17 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
     setUpdatingAccess(true);
     try {
       const userDocRef = doc(firebase.db, 'users', user.uid);
+
+      // 5. FIREBASE UPDATE: Include canViewBlogs in the update
       const updateData = {
         IsSeg0Approved: true,
         IsSeg1Approved: segmentAccess.day1_13,
         IsSeg2Approved: segmentAccess.day14_28,
         IsSeg3Approved: segmentAccess.day14_28,
+        canViewBlogs: segmentAccess.canViewBlogs, // Update for Blogs
       };
       await updateDoc(userDocRef, updateData);
+
       const userActivityRef = doc(firebase.db, 'userActivity', user.uid);
       try {
         await updateDoc(userActivityRef, {
@@ -330,7 +342,7 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
           throw e;
         }
       }
-      console.log("Segment access updated successfully!");
+      console.log("Access updated successfully! (Segments and Blogs)");
       if (typeof refreshUser === 'function') {
         refreshUser();
       }
@@ -341,8 +353,16 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
     }
   };
 
+  // 4. CHANGE HANDLER: Update to handle 'canViewBlogs'
   const handleSegmentChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = event.target;
+
+    if (name === 'canViewBlogs') {
+      setSegmentAccess(prev => ({ ...prev, canViewBlogs: checked }));
+      return;
+    }
+
+    // Existing segment logic
     if (name === 'day0') {
       return;
     }
@@ -400,7 +420,8 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
   };
 
   // Compute hasNotifications based on in-progress activities
-  const hasNotifications = progressActivities.some(([_, act]) => act.status.toLowerCase() === 'inprogress');
+  // const hasNotifications = progressActivities.some(([_, act]) => act.status.toLowerCase() === 'inprogress');
+  const hasNotifications = progressActivities.some(([_, act]) => (act.status ?? '').toLowerCase() === 'inprogress');
 
   // Define barColors before chartData
   const barColors = ['#EB5757', '#A78BFA', '#60A5FA', '#4FD1C5'];
@@ -469,48 +490,68 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
     <>
       <div className="bg-white rounded-xl shadow-md mb-6">
         <div className="p-5 pb-2 border-b" style={{ borderColor: "#125566" }}>
-          <h2 className="text-xl font-semibold" style={{ color: '#125566' }}>Segment Access Specefier</h2>
-          <p className="text-gray-500 mb-4">Provide or revoke access to video segments.</p>
+          <h2 className="text-xl font-semibold" style={{ color: '#125566' }}>Access Specefier</h2>
+          <p className="text-gray-500 mb-4">Provide or revoke access to video segments and other features.</p>
         </div>
-        <div className="p-5 flex items-center space-x-6">
-          <div className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              id="day0"
-              name="day0"
-              checked={segmentAccess.day0}
-              onChange={handleSegmentChange}
-              disabled
-              className="form-checkbox h-5 w-5 text-teal-600"
-            />
-            <label htmlFor="day0" className="text-gray-700">Day 0</label>
+        <div className="p-5">
+          <h3 className="text-lg font-medium mb-3">Segment Access</h3>
+          <div className="flex items-center space-x-6">
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="day0"
+                name="day0"
+                checked={segmentAccess.day0}
+                onChange={handleSegmentChange}
+                disabled
+                className="form-checkbox h-5 w-5 text-teal-600"
+              />
+              <label htmlFor="day0" className="text-gray-700">Day 0</label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="day1_13"
+                name="day1_13"
+                checked={segmentAccess.day1_13}
+                onChange={handleSegmentChange}
+                className="form-checkbox h-5 w-5 text-teal-600"
+              />
+              <label htmlFor="day1_13" className="text-gray-700">Day 1 - 13</label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="day14_28"
+                name="day14_28"
+                checked={segmentAccess.day14_28}
+                onChange={handleSegmentChange}
+                className="form-checkbox h-5 w-5 text-teal-600"
+              />
+              <label htmlFor="day14_28" className="text-gray-700">Day 14 - 28</label>
+            </div>
           </div>
-          <div className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              id="day1_13"
-              name="day1_13"
-              checked={segmentAccess.day1_13}
-              onChange={handleSegmentChange}
-              className="form-checkbox h-5 w-5 text-teal-600"
-            />
-            <label htmlFor="day1_13" className="text-gray-700">Day 1 - 13</label>
+
+          <h3 className="text-lg font-medium mt-6 mb-3">Feature Access</h3>
+          <div className="flex items-center space-x-6">
+            {/* 3. UI/CHECKBOX: Add the Blogs checkbox */}
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="canViewBlogs"
+                name="canViewBlogs"
+                checked={segmentAccess.canViewBlogs}
+                onChange={handleSegmentChange}
+                className="form-checkbox h-5 w-5 text-teal-600"
+              />
+              <label htmlFor="canViewBlogs" className="text-gray-700">Blogs</label>
+            </div>
           </div>
-          <div className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              id="day14_28"
-              name="day14_28"
-              checked={segmentAccess.day14_28}
-              onChange={handleSegmentChange}
-              className="form-checkbox h-5 w-5 text-teal-600"
-            />
-            <label htmlFor="day14_28" className="text-gray-700">Day 14 - 28</label>
-          </div>
+
           <button
             onClick={handleUpdateAccess}
             disabled={updatingAccess || componentLoading}
-            className={`px-4 py-2 rounded-lg text-white ${updatingAccess || componentLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-500 hover:bg-green-600'}`}
+            className={`mt-6 px-4 py-2 rounded-lg text-white ${updatingAccess || componentLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-500 hover:bg-green-600'}`}
           >
             {updatingAccess ? "Updating..." : "Update Access"}
           </button>
@@ -554,7 +595,12 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
             <h2 className="font-semibold" style={{ color: '#125566' }}>Stress Level Trends</h2>
             <p className="text-gray-500 mb-3">Weekly stress level progression</p>
           </div>
-          <div className="relative p-5" style={{ height: '200px' }}>
+          {/* FIX: Remove the fixed 'height: 200px' style. 
+            Use Tailwind's h-48 class (or a similar fixed height class)
+            for better control, or let it resize naturally.
+            The `relative p-5` is enough to contain the chart. 
+          */}
+          <div className="relative p-5 h-64">
             {stressLevels.length > 0 ? (
               <Bar data={chartData} options={chartOptions} />
             ) : (
@@ -594,9 +640,8 @@ const OverviewContent = ({ user, refreshUser }: { user: any, refreshUser?: () =>
                     <td className="px-3 py-2">{getRating(act.rating2)}</td>
                     <td className="px-3 py-2">
                       <span
-                        className={`px-2 py-1 rounded text-xs font-medium uppercase ${
-                          act.status.toLowerCase() === 'completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                        }`}
+                        className={`px-2 py-1 rounded text-xs font-medium uppercase ${act.status.toLowerCase() === 'completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                          }`}
                       >
                         {act.status}
                       </span>

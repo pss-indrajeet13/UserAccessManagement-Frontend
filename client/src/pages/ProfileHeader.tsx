@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { doc, deleteDoc, updateDoc, getDoc, setDoc, getDocs, query as firestoreQuery, where, collection } from "firebase/firestore";
 import { db } from "../firebase";
 import { useLocation } from "wouter";
+import jsPDF from 'jspdf'; // Add this import for PDF generation
 
 // Import images
 import ProgressIcon from '../Assets/Participant-header/progress.png';
@@ -33,6 +34,9 @@ export default function ProfileHeader({
   // State to hold the current active status.
   const [isActive, setIsActive] = useState<boolean | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
+
+  // State to hold the fetched phone number from DB.
+  const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
 
   // Fetch progress from userActivity/{uid}/report subcollection
   useEffect(() => {
@@ -143,8 +147,12 @@ export default function ProfileHeader({
             const data = snap.data();
             if (typeof data?.userStatus !== "undefined") {
               safeSet(Boolean(data.userStatus));
-              return;
             }
+            // Fetch and set phoneNumber if available
+            if (data?.phoneNumber && mounted) {
+              setPhoneNumber(data.phoneNumber);
+            }
+            return;
           }
         }
 
@@ -155,6 +163,10 @@ export default function ProfileHeader({
           if (!snaps.empty) {
             const first = snaps.docs[0].data();
             safeSet(typeof first?.userStatus !== "undefined" ? Boolean(first.userStatus) : false);
+            // Fetch and set phoneNumber if available
+            if (first?.phoneNumber && mounted) {
+              setPhoneNumber(first.phoneNumber);
+            }
             return;
           }
         }
@@ -164,6 +176,10 @@ export default function ProfileHeader({
           if (!snaps2.empty) {
             const first = snaps2.docs[0].data();
             safeSet(typeof first?.userStatus !== "undefined" ? Boolean(first.userStatus) : false);
+            // Fetch and set phoneNumber if available
+            if (first?.phoneNumber && mounted) {
+              setPhoneNumber(first.phoneNumber);
+            }
             return;
           }
         }
@@ -231,9 +247,10 @@ export default function ProfileHeader({
   const handleChatClick = () => {
     if (onChat) onChat();
 
-    // Collect possible phone sources
+    // Collect possible phone sources, now including fetched phoneNumber
     const rawPhone = user?.sectionProfile?.phoneNumber ||
       user?.phoneNumber ||
+      phoneNumber ||
       user?.contactNumber ||
       user?.phone;
 
@@ -263,6 +280,57 @@ export default function ProfileHeader({
     const message = "Hello! I need to discuss your profile details.";
     const url = `https://api.whatsapp.com/send?phone=${digits}&text=${encodeURIComponent(message)}`;
     window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  const handleExportClick = () => {
+    if (!user?.fullName) {
+      toast({ title: "User info missing", description: "Cannot export without user details." });
+      return;
+    }
+
+    const doc = new jsPDF();
+    let yPosition = 20;
+
+    // Title
+    doc.setFontSize(16);
+    doc.text(`Participant Profile: ${user.fullName}`, 20, yPosition);
+    yPosition += 15;
+
+    // Basic Info
+    doc.setFontSize(12);
+    doc.text(`Email: ${user.email || 'N/A'}`, 20, yPosition);
+    yPosition += 10;
+    doc.text(`Phone: ${phoneNumber || user?.phoneNumber || 'N/A'}`, 20, yPosition);
+    yPosition += 10;
+    doc.text(`Status: ${isActive === null ? 'Loading...' : isActive ? 'Active' : 'Inactive'}`, 20, yPosition);
+    yPosition += 15;
+
+    // Progress Metrics
+    doc.text('Progress Summary:', 20, yPosition);
+    yPosition += 10;
+    doc.text(`Program Progress: ${reportProgress ?? user?.progress ?? 0}%`, 20, yPosition);
+    yPosition += 10;
+    doc.text(`Average Stress Level: ${avgStress !== null ? `${avgStress}/5` : 'N/A'}`, 20, yPosition);
+    yPosition += 10;
+    doc.text(`Total Listening Hours: ${listeningHours !== null ? `${listeningHours} hrs` : 'N/A'}`, 20, yPosition);
+    yPosition += 15;
+
+    // Additional User Fields (if available)
+    if (user?.sectionProfile) {
+      doc.text('Section Profile Details:', 20, yPosition);
+      yPosition += 10;
+      // Add more fields as needed, e.g.,
+      // doc.text(`Field: ${user.sectionProfile.someField}`, 20, yPosition);
+      yPosition += 10;
+    }
+
+    // Generated Date
+    const now = new Date();
+    doc.text(`Generated on: ${now.toLocaleDateString()}`, 20, yPosition);
+
+    // Save the PDF
+    doc.save(`${user.fullName.replace(/\s+/g, '_')}_profile.pdf`);
+    toast({ title: "Export Successful", description: "PDF downloaded." });
   };
 
   const handleDeleteClick = () => {
@@ -320,7 +388,13 @@ export default function ProfileHeader({
             View Personal Information, Track History, Monitor Progress & Access Insights
           </p>
         </div>
-        <button className="bg-teal-600 text-white px-4 py-2 rounded-lg">Export</button>
+        <button 
+          className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={handleExportClick}
+          disabled={loading || !user?.fullName}
+        >
+          Export
+        </button>
       </div>
 
       <div className="bg-white rounded-xl shadow-md p-5 mb-6 flex items-center justify-between">

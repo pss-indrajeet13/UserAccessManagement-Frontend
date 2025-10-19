@@ -205,37 +205,76 @@ const Participants: React.FC = () => {
     fetchData();
   }, []);
 
+  // function formatLastSignIn(dateString: string | undefined): string {
+  //   if (!dateString) {
+  //     return "Never";
+  //   }
+
+  //   const lastSignInDate = new Date(dateString);
+  //   const today = new Date();
+  //   const yesterday = new Date(today);
+  //   yesterday.setDate(today.getDate() - 1);
+
+  //   const isToday = lastSignInDate.toDateString() === today.toDateString();
+  //   const isYesterday = lastSignInDate.toDateString() === yesterday.toDateString();
+
+  //   const timeOptions = {
+  //     hour: '2-digit',
+  //     minute: '2-digit',
+  //     second: '2-digit',
+  //     hour12: true,
+  //   } as const;
+
+  //   if (isToday) {
+  //     return `Today, ${lastSignInDate.toLocaleTimeString('en-IN', timeOptions).replace('am', 'AM').replace('pm', 'PM')}`;
+  //   } else if (isYesterday) {
+  //     return `Yesterday, ${lastSignInDate.toLocaleTimeString('en-IN', timeOptions).replace('am', 'AM').replace('pm', 'PM')}`;
+  //   } else {
+  //     return lastSignInDate.toLocaleString('en-IN', {
+  //       day: 'numeric',
+  //       month: 'numeric',
+  //       year: 'numeric',
+  //       ...timeOptions,
+  //     }).replace('am', 'AM').replace('pm', 'PM');
+  //   }
+  // }
+
   function formatLastSignIn(dateString: string | undefined): string {
     if (!dateString) {
       return "Never";
     }
 
     const lastSignInDate = new Date(dateString);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
+    const now = new Date();
 
-    const isToday = lastSignInDate.toDateString() === today.toDateString();
-    const isYesterday = lastSignInDate.toDateString() === yesterday.toDateString();
+    // Calculate the difference in full days
+    const oneDay = 1000 * 60 * 60 * 24;
+
+    // Set time of both dates to midnight (00:00:00) for accurate day difference
+    const dateOnlyLast = new Date(lastSignInDate.getFullYear(), lastSignInDate.getMonth(), lastSignInDate.getDate()).getTime();
+    const dateOnlyNow = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+    const diffDays = Math.round(Math.abs((dateOnlyNow - dateOnlyLast) / oneDay));
 
     const timeOptions = {
       hour: '2-digit',
       minute: '2-digit',
-      second: '2-digit',
       hour12: true,
     } as const;
 
-    if (isToday) {
-      return `Today, ${lastSignInDate.toLocaleTimeString('en-IN', timeOptions).replace('am', 'AM').replace('pm', 'PM')}`;
-    } else if (isYesterday) {
-      return `Yesterday, ${lastSignInDate.toLocaleTimeString('en-IN', timeOptions).replace('am', 'AM').replace('pm', 'PM')}`;
+    const timePart = lastSignInDate.toLocaleTimeString('en-US', timeOptions);
+
+    if (diffDays === 0) {
+      return `Today, ${timePart}`;
+    } else if (diffDays === 1) {
+      return `Yesterday, ${timePart}`;
     } else {
-      return lastSignInDate.toLocaleString('en-IN', {
+      // Return full date and time for older events
+      return lastSignInDate.toLocaleDateString('en-US', {
+        month: 'short',
         day: 'numeric',
-        month: 'numeric',
         year: 'numeric',
-        ...timeOptions,
-      }).replace('am', 'AM').replace('pm', 'PM');
+      }) + `, ${timePart}`;
     }
   }
 

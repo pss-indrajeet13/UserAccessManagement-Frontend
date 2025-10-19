@@ -331,6 +331,15 @@ export default function Notifications() {
     const [isLoading, setIsLoading] = useState(true);
     const [filterDate, setFilterDate] = useState<string>(new Date().toISOString().split("T")[0]);
 
+    // When the notifications page is opened, mark notifications as seen by storing timestamp
+    useEffect(() => {
+        try {
+            localStorage.setItem('lastSeenNotificationsAt', new Date().toISOString());
+        } catch (e) {
+            console.warn('Unable to persist last seen notifications timestamp', e);
+        }
+    }, []);
+
     const fetchedDataRef = useRef<{
         activityUsers: User[];
         userProfiles: UserNameRecord[];

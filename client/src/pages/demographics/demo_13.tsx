@@ -152,11 +152,11 @@ const Day13Demographics: React.FC<{ uid?: string }> = ({ uid: propUid }) => {
             <ParticipantProfileTabs />
             <div className="max-w-7xl mx-auto px-6 p-6">
                 {/* Fix 2: Use the headerUser object to show name immediately */}
-                <ProfileHeader user={headerUser} />
+                <ProfileHeader user={{ ...headerUser, uid }} />
 
                 <div className="mt-8">
                     {loading ? (
-                        <div className="text-center text-xl text-gray-500 mt-8 animate-pulse">Loading Day 28 questionnaire data...</div>
+                        <div className="text-center text-xl text-gray-500 mt-8 animate-pulse">Loading Day 13 questionnaire data...</div>
                     ) : error && error === "DATA_NOT_FILLED" ? (
                         // SCENARIO 1: Back-end explicitly told us data is missing (replaces "Error Loading Data..." box)
                         <NoDataNote />

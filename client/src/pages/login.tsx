@@ -8,6 +8,8 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false); // <-- NEW
   const [error, setError] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
   const [loading, setLoading] = useState(false);
   const [, setLocation] = useLocation();
   const { login } = useAuth();
@@ -15,12 +17,63 @@ export default function Login() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setEmailError("");
+    setPasswordError("");
     setLoading(true);
+    // Basic client-side validation
+    const emailRegex = /^\S+@\S+\.\S+$/;
+    let hasClientError = false;
+    if (!emailRegex.test(email)) {
+      setEmailError('Please enter a valid email address.');
+      hasClientError = true;
+    }
+    if (!password || password.length < 4) {
+      // minimal password length check for UX; actual auth still enforced by Firebase
+      setPasswordError('Please enter your password.');
+      hasClientError = true;
+    }
+    if (hasClientError) {
+      setLoading(false);
+      return;
+    }
+
     try {
       await login(email, password);
       setLocation("/dashboard");
     } catch (err: any) {
-      setError(err.message || "Login failed");
+      // Normalize message and code
+      const code: string | undefined = err?.code;
+      const message: string = String(err?.message || "").toLowerCase();
+
+      // Some backends may return generic messages like INVALID_LOGIN_CREDENTIALS
+      if (message.includes('invalid_login_credentials') || message.includes('invalid login') || message.includes('invalid_login') || message.includes('invalid_credentials') || message.includes('invalid password')) {
+        // We don't know which field is incorrect, so show a clear message on both
+        setEmailError('Email or password is incorrect.');
+        setPasswordError('Email or password is incorrect.');
+      } else if (code) {
+        switch (code) {
+          case 'auth/user-not-found':
+            setEmailError('Email not found. Please check and try again.');
+            break;
+          case 'auth/invalid-email':
+            setEmailError('Invalid email address.');
+            break;
+          case 'auth/wrong-password':
+            setPasswordError('Incorrect password.');
+            break;
+          case 'auth/network-request-failed':
+            setError('Network error. Check your internet connection and try again.');
+            break;
+          case 'auth/too-many-requests':
+            setError('Too many failed attempts. Please try again later.');
+            break;
+          default:
+            setError(err.message || 'Login failed.');
+            break;
+        }
+      } else {
+        setError(err?.message || 'Login failed.');
+      }
     }
     setLoading(false);
   };
@@ -56,20 +109,22 @@ export default function Login() {
               type="email"
               placeholder="Enter your email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => { setEmail(e.target.value); setEmailError(''); setError(''); }}
               required
               className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#50C8E5] transition-colors duration-200 placeholder-gray-400 text-gray-800"
             />
+            {emailError && <p className="text-red-500 text-sm mt-1">{emailError}</p>}
           </div>
           <div className="relative">
             <input
               type={showPassword ? "text" : "password"}
               placeholder="Password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => { setPassword(e.target.value); setPasswordError(''); setError(''); }}
               required
               className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#50C8E5] transition-colors duration-200 placeholder-gray-400 text-gray-800 pr-10"
             />
+            {passwordError && <p className="text-red-500 text-sm mt-1">{passwordError}</p>}
             <button
               type="button"
               tabIndex={-1}
