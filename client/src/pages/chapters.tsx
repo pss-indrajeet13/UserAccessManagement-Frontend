@@ -1,85 +1,134 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Header from "@/components/layout/header";
 import { CardHeader, CardTitle } from "@/components/ui/card";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import GaugeChart from "react-gauge-chart";
+import { db } from "@/firebase";
+import { collection, getDocs, doc, getDoc } from "firebase/firestore";
+import fertiwellLogo from "@/Assets/Sidebar-screen/Fertiliwell-Logo-1.svg";
 
-// Dummy data for chapters
-const chaptersData = [
-  { id: "123456", name: "Chapter 1: Calming the Mind...", status: "Completed", completionRate: "95%", participants: 148, avgTime: "20min", dropOff: "5%" },
-  { id: "123457", name: "Chapter 2: Observing Progre...", status: "Active", completionRate: "70%", participants: 70, avgTime: "20min", dropOff: "13%" },
-  { id: "123458", name: "Chapter 3: Calming the Mind...", status: "Active", completionRate: "95%", participants: 148, avgTime: "20min", dropOff: "13%" },
-  { id: "123459", name: "Chapter 4: Observing Progre...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123460", name: "Chapter 5: Calming the Mind...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123461", name: "Chapter 6: Observing Progre...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123462", name: "Chapter 7: Calming the Mind...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123463", name: "Chapter 8: Observing Progre...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123464", name: "Chapter 9: Calming the Mind...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123465", name: "Chapter 10: Observing Progre...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123466", name: "Chapter 11: Calming the Mind...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123467", name: "Chapter 12: Observing Progre...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123468", name: "Chapter 13: Calming the Mind...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123469", name: "Chapter 14: Observing Progre...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123470", name: "Chapter 15: Calming the Mind...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123471", name: "Chapter 16: Observing Progre...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123472", name: "Chapter 17: Calming the Mind...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123473", name: "Chapter 18: Observing Progre...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123474", name: "Chapter 19: Calming the Mind...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123475", name: "Chapter 20: Observing Progre...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123476", name: "Chapter 21: Calming the Mind...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123477", name: "Chapter 22: Observing Progre...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123478", name: "Chapter 23: Calming the Mind...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123479", name: "Chapter 24: Observing Progre...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123480", name: "Chapter 25: Calming the Mind...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123481", name: "Chapter 26: Observing Progre...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123482", name: "Chapter 27: Calming the Mind...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-  { id: "123483", name: "Chapter 28: Observing Progre...", status: "Upcoming", completionRate: "0%", participants: 0, avgTime: "0min", dropOff: "0%" },
-];
+interface ChapterData {
+  id: string;
+  name: string;
+  dayKey: string;
+  completedCount: number;
+  totalParticipants: number;
+  completionRate: number;
+}
 
-// Calculate stats
-const calculateStats = () => {
-  const totalChapters = chaptersData.length;
-  const completed = chaptersData.filter((c) => c.status === "Completed").length;
-  const active = chaptersData.filter((c) => c.status === "Active").length;
-  const upcoming = totalChapters - completed - active;
+interface StatsData {
+  completed: number;
+  active: number;
+  upcoming: number;
+  overallProgress: string;
+  avgCompletionRate: number;
+  highestDropOff: number;
+  highestDropOffChapter: string;
+}
+
+// Calculate stats from chapters data
+const calculateStats = (chaptersData: ChapterData[]): StatsData => {
+  const totalChapters = 29; // Chapters 0-28
+  const completionRates = chaptersData.map(c => c.completionRate);
+  const avgRate = completionRates.length > 0 ? completionRates.reduce((a, b) => a + b, 0) / completionRates.length : 0;
+
+  // Categorize chapters based on completion rate
+  const completed = chaptersData.filter((c) => c.completionRate === 100).length;
+  const active = chaptersData.filter((c) => c.completionRate > 0 && c.completionRate < 100).length;
+  const upcoming = chaptersData.filter((c) => c.completionRate === 0).length;
   const overallProgress = ((completed / totalChapters) * 100).toFixed(0);
-  const avgCompletionRate =
-    chaptersData
-      .filter((c) => c.status === "Active")
-      .reduce((sum, c) => sum + parseInt(c.completionRate), 0) / active || 0;
-  const highestDropOff = Math.max(
-    ...chaptersData.map((c) => parseInt(c.dropOff) || 0)
-  );
-  const highestDropOffChapter =
-    chaptersData.find((c) => parseInt(c.dropOff) === highestDropOff)?.name ||
-    "";
 
   return {
     completed,
     active,
     upcoming,
     overallProgress,
-    avgCompletionRate,
-    highestDropOff,
-    highestDropOffChapter,
+    avgCompletionRate: avgRate,
+    highestDropOff: 0,
+    highestDropOffChapter: "",
   };
 };
 
 const Chapters: React.FC = () => {
-  const {
-    completed,
-    active,
-    upcoming,
-    overallProgress,
-    avgCompletionRate,
-    highestDropOff,
-    highestDropOffChapter,
-  } = calculateStats();
+  const [chaptersData, setChaptersData] = useState<ChapterData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<StatsData>({
+    completed: 0,
+    active: 0,
+    upcoming: 0,
+    overallProgress: "0",
+    avgCompletionRate: 0,
+    highestDropOff: 0,
+    highestDropOffChapter: "",
+  });
+
+  useEffect(() => {
+    const fetchChaptersData = async () => {
+      try {
+        const userActivityCollection = collection(db, "userActivity");
+        const snapshot = await getDocs(userActivityCollection);
+
+        // Initialize chapter counts for days 0-28
+        const chapterCounts: Record<string, { completed: number; total: number }> = {};
+        for (let i = 0; i <= 28; i++) {
+          chapterCounts[`day${i}`] = { completed: 0, total: 0 };
+        }
+
+        // Count participants and completed chapters
+        let totalParticipants = 0;
+
+        for (const userDoc of snapshot.docs) {
+          const userActivity = userDoc.data();
+          const progress = userActivity.progress || {};
+
+          totalParticipants++;
+
+          // Count completed days for this user
+          for (let i = 0; i <= 28; i++) {
+            const dayKey = `day${i}`;
+            if (dayKey in chapterCounts) {
+              chapterCounts[dayKey].total++;
+              if (progress[dayKey] && progress[dayKey].status?.toLowerCase() === "completed") {
+                chapterCounts[dayKey].completed++;
+              }
+            }
+          }
+        }
+
+        // Build chapters data
+        const chapters: ChapterData[] = [];
+        for (let i = 0; i <= 28; i++) {
+          const dayKey = `day${i}`;
+          const counts = chapterCounts[dayKey];
+          const completionRate = counts.total > 0 ? (counts.completed / counts.total) * 100 : 0;
+
+          chapters.push({
+            id: `chapter-${i}`,
+            name: `Chapter ${i}`,
+            dayKey,
+            completedCount: counts.completed,
+            totalParticipants: counts.total,
+            completionRate: Math.round(completionRate),
+          });
+        }
+
+        setChaptersData(chapters);
+        const calculatedStats = calculateStats(chapters);
+        setStats(calculatedStats);
+      } catch (error) {
+        console.error("Error fetching chapters data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchChaptersData();
+  }, []);
 
   const data = [
-    { name: "Completed", value: completed, color: "#4CAF50" },
-    { name: "Active", value: active, color: "#9C27B0" },
-    { name: "Upcoming", value: upcoming, color: "#FFCA28" },
+    { name: "Completed", value: stats.completed, color: "#4CAF50" },
+    { name: "Active", value: stats.active, color: "#9C27B0" },
+    { name: "Upcoming", value: stats.upcoming, color: "#FFCA28" },
   ];
 
   return (
@@ -145,7 +194,7 @@ const Chapters: React.FC = () => {
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex items-center justify-center">
                   <span className="text-xl font-bold text-[#1E4A5A]">
-                    {overallProgress}%
+                    {stats.overallProgress}%
                   </span>
                 </div>
               </div>
@@ -167,7 +216,7 @@ const Chapters: React.FC = () => {
               <GaugeChart
                 id="avg-completion-rate"
                 nrOfLevels={20}
-                percent={Math.round(avgCompletionRate) / 100}
+                percent={stats.avgCompletionRate / 100}
                 colors={["#4CAF50", "#e0e0e0"]}
                 arcWidth={0.3}
                 textColor="#000"
@@ -226,13 +275,34 @@ const Chapters: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {chaptersData.map((chapter) => (
-                <tr key={chapter.id} className="border-b">
-                  <td className="p-2">{chapter.name}</td>
-                  <td className="p-2">{chapter.completionRate}</td>
-                  <td className="p-2">{chapter.participants}</td>
+              {loading ? (
+                <tr>
+                  <td colSpan={3} className="p-8 text-center">
+                    <div className="flex justify-center items-center">
+                      <img
+                        src={fertiwellLogo}
+                        alt="Loading"
+                        className="loading-spinner"
+                        style={{ width: "80px", height: "80px" }}
+                      />
+                    </div>
+                  </td>
                 </tr>
-              ))}
+              ) : chaptersData.length > 0 ? (
+                chaptersData.map((chapter) => (
+                  <tr key={chapter.id} className="border-b hover:bg-gray-50">
+                    <td className="p-2">{chapter.name}</td>
+                    <td className="p-2">{chapter.completionRate}%</td>
+                    <td className="p-2">{chapter.completedCount}/{chapter.totalParticipants}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={3} className="p-4 text-center text-gray-500">
+                    No data available
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

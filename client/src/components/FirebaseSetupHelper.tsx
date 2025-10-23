@@ -37,7 +37,7 @@ service cloud.firestore {
       action: (
         <Button 
           onClick={() => {
-            window.open('https://console.firebase.google.com/project/fertiwell-ba75e/firestore/rules', '_blank');
+            window.open('https://console.firebase.google.com/project/fertiwell-72814/firestore/rules', '_blank');
             setStep(2);
           }}
           className="bg-orange-600 hover:bg-orange-700 text-white"
