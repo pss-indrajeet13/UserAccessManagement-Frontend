@@ -26,6 +26,15 @@ interface StatsData {
   highestDropOffChapter: string;
 }
 
+// Interface for the user data fetched from the API
+interface UserType {
+  uid: string;
+  role?: string;
+  fullName?: string;
+  displayName?: string;
+  name?: string;
+}
+
 // Calculate stats from chapters data
 const calculateStats = (chaptersData: ChapterData[]): StatsData => {
   const totalChapters = 29; // Chapters 0-28
@@ -64,31 +73,84 @@ const Chapters: React.FC = () => {
 
   useEffect(() => {
     const fetchChaptersData = async () => {
+      let participantData: UserType[] = [];
+      let isApiSuccessful = false;
+
+      // 1. FETCH AND FILTER PARTICIPANT LIST from API
+      try {
+        const res = await fetch(`/api/list-users?t=${Date.now()}`, { cache: 'no-store' });
+        if (res.ok) {
+          const data: UserType[] = await res.json();
+          // Filter out users where role is 'admin'
+          participantData = data.filter(u => u.role !== 'admin');
+          isApiSuccessful = true;
+        } else {
+            console.warn("API call failed, falling back to per-user Firestore checks.");
+        }
+      } catch (err) {
+        console.error("Error fetching participant list from API:", err);
+        // isApiSuccessful remains false, triggering the fallback
+      }
+      
+      const nonAdminUids = new Set(participantData.map(u => u.uid));
+
       try {
         const userActivityCollection = collection(db, "userActivity");
         const snapshot = await getDocs(userActivityCollection);
 
-        // Initialize chapter counts for days 0-28
-        const chapterCounts: Record<string, { completed: number; total: number }> = {};
+        const chapterCounts: Record<
+          string,
+          { completed: number; total: number }
+        > = {};
         for (let i = 0; i <= 28; i++) {
           chapterCounts[`day${i}`] = { completed: 0, total: 0 };
         }
 
-        // Count participants and completed chapters
         let totalParticipants = 0;
 
         for (const userDoc of snapshot.docs) {
+          const uid = userDoc.id;
           const userActivity = userDoc.data();
           const progress = userActivity.progress || {};
 
+          let skipUser = false;
+
+          if (isApiSuccessful) {
+            // OPTIMIZED CHECK: Skip if UID is not in the list of non-admin participants
+            if (!nonAdminUids.has(uid)) {
+                skipUser = true;
+            }
+          } else {
+            // FALLBACK: Perform the original per-user Firestore read
+            const userRef = doc(db, "users", uid);
+            const userSnap = await getDoc(userRef);
+            const userData = userSnap.data();
+
+            if (userData?.role === "admin") {
+                skipUser = true;
+            }
+            
+            // NOTE: Original console.log relies on this userData fetch:
+            const fullName = userData?.fullName || "—";
+            const displayName = userData?.displayName || userData?.name || uid;
+            console.log(
+              `Participant: ${fullName} | Display: ${displayName} (uid: ${uid})`
+            );
+          }
+          
+          if (skipUser) continue; // Skip to the next user if they are an admin
+
+          // This code only runs for non-admin participants
           totalParticipants++;
 
-          // Count completed days for this user
           for (let i = 0; i <= 28; i++) {
             const dayKey = `day${i}`;
             if (dayKey in chapterCounts) {
               chapterCounts[dayKey].total++;
-              if (progress[dayKey] && progress[dayKey].status?.toLowerCase() === "completed") {
+              if (
+                progress[dayKey] &&
+                progress[dayKey].status?.toLowerCase() === "completed"
+              ) {
                 chapterCounts[dayKey].completed++;
               }
             }
@@ -100,7 +162,8 @@ const Chapters: React.FC = () => {
         for (let i = 0; i <= 28; i++) {
           const dayKey = `day${i}`;
           const counts = chapterCounts[dayKey];
-          const completionRate = counts.total > 0 ? (counts.completed / counts.total) * 100 : 0;
+          const completionRate =
+            counts.total > 0 ? (counts.completed / counts.total) * 100 : 0;
 
           chapters.push({
             id: `chapter-${i}`,
@@ -226,26 +289,26 @@ const Chapters: React.FC = () => {
 
           {/* ✅ Card 3: Highest Drop-Off Point */}
           {/* <div className="bg-white rounded-lg shadow border border-gray-200">
-            <CardHeader
-              className="pb-2 border-b"
-              style={{ borderColor: "#125566" }}
-            >
-              <CardTitle className="text-lg font-semibold text-[#125566]">
-                Highest Drop-Off Point
-              </CardTitle>
-              <p className="text-sm text-gray-500">{highestDropOffChapter}</p>
-            </CardHeader>
-            <div className="p-6">
-              <GaugeChart
-                id="highest-drop-off"
-                nrOfLevels={20}
-                percent={highestDropOff / 100}
-                colors={["#F44336", "#e0e0e0"]}
-                arcWidth={0.3}
-                textColor="#000"
-              />
-            </div>
-          </div> */}
+            <CardHeader
+              className="pb-2 border-b"
+              style={{ borderColor: "#125566" }}
+            >
+              <CardTitle className="text-lg font-semibold text-[#125566]">
+                Highest Drop-Off Point
+              </CardTitle>
+              <p className="text-sm text-gray-500">{highestDropOffChapter}</p>
+            </CardHeader>
+            <div className="p-6">
+              <GaugeChart
+                id="highest-drop-off"
+                nrOfLevels={20}
+                percent={highestDropOff / 100}
+                colors={["#F44336", "#e0e0e0"]}
+                arcWidth={0.3}
+                textColor="#000"
+              />
+            </div>
+          </div> */}
         </div>
 
         {/* Chapters Table */}
@@ -255,16 +318,16 @@ const Chapters: React.FC = () => {
               Chapters List
             </h3>
             {/* <div className="space-x-2">
-              <button className="px-4 py-2 bg-[#1E4A5A] text-white rounded">
-                All Sections
-              </button>
-              <button className="px-4 py-2 bg-gray-200 text-[#1E4A5A] rounded">
-                Section-A
-              </button>
-              <button className="px-4 py-2 bg-gray-200 text-[#1E4A5A] rounded">
-                Section-B
-              </button>
-            </div> */}
+              <button className="px-4 py-2 bg-[#1E4A5A] text-white rounded">
+                All Sections
+              </button>
+              <button className="px-4 py-2 bg-gray-200 text-[#1E4A5A] rounded">
+                Section-A
+              </button>
+              <button className="px-4 py-2 bg-gray-200 text-[#1E4A5A] rounded">
+                Section-B
+              </button>
+            </div> */}
           </div>
           <table className="w-full text-sm">
             <thead>

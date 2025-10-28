@@ -60,6 +60,13 @@ interface SectionProfile {
   lastName?: string;
 }
 
+interface DerivedActivity {
+    chapter: number;
+    progress: number;
+    // 🆕 New field to store the specific progress score
+    segmentProgressScore?: number;
+}
+
 interface UserType {
   uid: string;
   email: string | null;
@@ -86,7 +93,8 @@ const Participants: React.FC = () => {
   const [search, setSearch] = useState("");
   const [cards, setCards] = useState(baseStats);
   const [deactivatedSet, setDeactivatedSet] = useState<Set<string>>(new Set());
-  const [derivedMap, setDerivedMap] = useState<Record<string, { chapter: number; progress: number }>>({});
+  // 🔄 Updated derivedMap type
+  const [derivedMap, setDerivedMap] = useState<Record<string, DerivedActivity>>({});
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -205,40 +213,6 @@ const Participants: React.FC = () => {
     fetchData();
   }, []);
 
-  // function formatLastSignIn(dateString: string | undefined): string {
-  //   if (!dateString) {
-  //     return "Never";
-  //   }
-
-  //   const lastSignInDate = new Date(dateString);
-  //   const today = new Date();
-  //   const yesterday = new Date(today);
-  //   yesterday.setDate(today.getDate() - 1);
-
-  //   const isToday = lastSignInDate.toDateString() === today.toDateString();
-  //   const isYesterday = lastSignInDate.toDateString() === yesterday.toDateString();
-
-  //   const timeOptions = {
-  //     hour: '2-digit',
-  //     minute: '2-digit',
-  //     second: '2-digit',
-  //     hour12: true,
-  //   } as const;
-
-  //   if (isToday) {
-  //     return `Today, ${lastSignInDate.toLocaleTimeString('en-IN', timeOptions).replace('am', 'AM').replace('pm', 'PM')}`;
-  //   } else if (isYesterday) {
-  //     return `Yesterday, ${lastSignInDate.toLocaleTimeString('en-IN', timeOptions).replace('am', 'AM').replace('pm', 'PM')}`;
-  //   } else {
-  //     return lastSignInDate.toLocaleString('en-IN', {
-  //       day: 'numeric',
-  //       month: 'numeric',
-  //       year: 'numeric',
-  //       ...timeOptions,
-  //     }).replace('am', 'AM').replace('pm', 'PM');
-  //   }
-  // }
-
   function formatLastSignIn(dateString: string | undefined): string {
     if (!dateString) {
       return "Never";
@@ -336,13 +310,26 @@ const Participants: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     const fetchActivities = async () => {
-      const entries: [string, { chapter: number; progress: number }][] = await Promise.all(
+      // 🔄 Update the tuple type to include the new data structure
+      const entries: [string, DerivedActivity][] = await Promise.all(
         paginatedUsers.map(async (u) => {
           try {
             const uaRef = doc(db, 'userActivity', u.uid);
             const snap = await getDoc(uaRef);
-            if (!snap.exists()) return [u.uid, { chapter: 0, progress: u.progress ?? 0 }];
+            // 🆕 Initialize with default values, including null for the new score
+            const defaultDerived: DerivedActivity = { chapter: 0, progress: u.progress ?? 0, segmentProgressScore: undefined };
+
+            if (!snap.exists()) return [u.uid, defaultDerived];
+            
             const data: any = snap.data();
+            
+            // 1. Fetch the requested segment progress score
+            const rawSegmentScore = data?.segment0?.sectionProfile?.progressScore;
+            let segmentProgressScore: number | undefined = undefined;
+            if (typeof rawSegmentScore === 'number' && !isNaN(rawSegmentScore)) {
+                segmentProgressScore = Math.max(0, Math.min(100, Math.round(rawSegmentScore)));
+            }
+
             const progressData = data?.progress || {};
             const days = Object.entries(progressData) as [string, { status?: string }][];
             const parsed = days
@@ -361,7 +348,8 @@ const Participants: React.FC = () => {
             } else {
               currentChapter = 0;
             }
-            // Try to fetch progress from report subcollection; fallback to derived
+            
+            // 2. Determine the program completion percentage
             let progressPct = Math.round((completedCount / 28) * 100);
             try {
               const reportSnaps = await getDocs(collection(db, 'userActivity', u.uid, 'report'));
@@ -378,15 +366,26 @@ const Participants: React.FC = () => {
                 const rp = typeof dta?.progress === 'number' ? dta.progress : (typeof dta?.Progress === 'number' ? dta.Progress : undefined);
                 if (typeof rp === 'number') progressPct = Math.max(0, Math.min(100, Math.round(rp)));
               }
-            } catch { }
-            return [u.uid, { chapter: currentChapter, progress: progressPct }] as [string, { chapter: number; progress: number }];
-          } catch {
-            return [u.uid, { chapter: 0, progress: u.progress ?? 0 }];
+            } catch { /* ignore report subcollection error */ }
+
+            // 3. Return the full derived object
+            const result: DerivedActivity = { 
+                chapter: currentChapter, 
+                progress: progressPct, 
+                segmentProgressScore: segmentProgressScore 
+            };
+            
+            return [u.uid, result] as [string, DerivedActivity];
+
+          } catch (e) {
+             console.error(`Error fetching activity for ${u.uid}:`, e);
+             return [u.uid, { chapter: 0, progress: u.progress ?? 0, segmentProgressScore: undefined }];
           }
         })
       );
       if (!cancelled) {
-        const next: Record<string, { chapter: number; progress: number }> = {};
+        // 🔄 Update the map with the new DerivedActivity structure
+        const next: Record<string, DerivedActivity> = {};
         for (const [uid, val] of entries) next[uid] = val;
         setDerivedMap(next);
       }
@@ -461,8 +460,8 @@ const Participants: React.FC = () => {
             ))}
           </select>
           {/* <button className="ml-auto bg-teal-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-teal-700 transition">
-            Export
-          </button> */}
+            Export
+          </button> */}
         </div>
 
         <div className="bg-white rounded-xl shadow-md overflow-x-auto">
@@ -535,6 +534,9 @@ const Participants: React.FC = () => {
                 paginatedUsers.map((u) => {
                   const derived = derivedMap[u.uid];
                   const currentChapter = derived?.chapter ?? 0;
+                  // 🆕 Get the new progress score, falling back to other progress values
+                  const displayProgress = derived?.segmentProgressScore ?? derived?.progress ?? u.progress ?? 0;
+
                   let permitted = true;
                   if (currentChapter >= 1 && currentChapter <= 13) permitted = Boolean(u.IsSeg1Approved);
                   if (currentChapter >= 14) permitted = Boolean(u.IsSeg2Approved || u.IsSeg3Approved);
@@ -551,7 +553,8 @@ const Participants: React.FC = () => {
                           <span>{currentChapter}</span>
                         </div>
                       </td>
-                      <td className="py-2 px-6">{(derived?.progress ?? u.progress ?? 0)}%</td>
+                      {/* 🔄 Updated to display the new progress score */}
+                      <td className="py-2 px-6">{displayProgress}%</td>
                       <td className="py-2 px-6">
                         {formatLastSignIn(u.lastSignIn)}
                       </td>

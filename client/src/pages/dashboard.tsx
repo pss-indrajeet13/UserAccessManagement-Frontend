@@ -25,8 +25,8 @@ interface DashboardStats {
   totalActiveUsers: number;
   averageMoodScore: string;
   overallProgress: number;
-  inactiveForDays: number;
-  deactivatedCount: number;
+  inactiveForDays: number; // Users inactive for 7+ days (status: 'inactive')
+  deactivatedCount: number; // Users pending activation (userStatus: false)
   milestones: number;
   meditationVideoUsers: number;
   incompleteSessions: number;
@@ -62,29 +62,31 @@ const defaultStats: DashboardStats = {
   milestoneCountToday: 0,
 };
 
-
-// ⚠️ UPDATED FUNCTION TO UPDATE USER STATUSES BASED ON LAST ACTIVE TIME (with batch chunking)
-// IMPORTANT: Do NOT overwrite lastActive here; it must reflect the user's actual last activity.
+/**
+ * 🎯 UPDATED FUNCTION: Determines if a user should be marked 'inactive' based on 7-day rule.
+ * The logic is moved here for clarity but is designed to be executed regularly (e.g., via a Cloud Function
+ * or triggered on a dashboard load if no backend process exists) to keep the 'status' field accurate.
+ * It will now look for a combination of timestamps.
+ */
 async function updateUserStatusesBasedOnActivity(database: Firestore) {
   try {
     const usersCol = collection(database, 'users');
-    const q = query(usersCol);
-    const querySnapshot = await getDocs(q);
+    // Fetch all users
+    const querySnapshot = await getDocs(query(usersCol));
     const now = new Date();
     const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
 
-    // Collect all updates first to determine if batching is needed
+    // Collect all updates first
     const updates: Array<{ id: string; data: { status: string } }> = [];
-    let updateCount = 0;
-
+    
     for (const docSnap of querySnapshot.docs) {
       const data: any = docSnap.data();
       const userId = docSnap.id;
 
-      // Skip admin users for status updates (assuming admins don't need inactivity checks)
-      if (data?.role === 'admin') continue;
+      // Skip admin users and users explicitly set to userStatus: false (Pending)
+      if (data?.role === 'admin' || data?.userStatus === false) continue;
 
-      // Prioritize lastActive for inactivity check
+      // Prioritize most reliable activity timestamps
       const lastActiveTimestamp = data?.lastActive || data?.lastSignIn || data?.lastLogin || data?.lastSeen;
 
       let shouldBeInactive = true;
@@ -95,18 +97,17 @@ async function updateUserStatusesBasedOnActivity(database: Firestore) {
           : new Date(lastActiveTimestamp);
 
         const diff = now.getTime() - lastActiveDate.getTime();
+        // 🎯 The core logic: user is NOT inactive if they logged in/active in the last 7 days.
         shouldBeInactive = diff >= sevenDaysInMs;
       } // else: no timestamp, treat as inactive
 
-      const currentStatus = data?.status || 'active';
+      const currentStatus = String(data?.status || '').toLowerCase();
 
       // Only queue update if status needs to change
       if (shouldBeInactive && currentStatus !== 'inactive') {
         updates.push({ id: userId, data: { status: 'inactive' } });
-        updateCount++;
       } else if (!shouldBeInactive && currentStatus !== 'active') {
         updates.push({ id: userId, data: { status: 'active' } });
-        updateCount++;
       }
     }
 
@@ -116,7 +117,6 @@ async function updateUserStatusesBasedOnActivity(database: Firestore) {
 
     // Chunk into batches of 499 (safe under 500 limit)
     const BATCH_SIZE = 499;
-    const totalBatches = Math.ceil(updates.length / BATCH_SIZE);
 
     for (let i = 0; i < updates.length; i += BATCH_SIZE) {
       const chunk = updates.slice(i, i + BATCH_SIZE);
@@ -129,6 +129,7 @@ async function updateUserStatusesBasedOnActivity(database: Firestore) {
       await batch.commit();
     }
 
+    console.log(`Successfully updated statuses for ${updates.length} users.`);
     return true;
   } catch (error) {
     console.error('Error updating user statuses:', error);
@@ -136,25 +137,32 @@ async function updateUserStatusesBasedOnActivity(database: Firestore) {
   }
 }
 
+
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // ⚠️ NEW STATE FOR ADMIN NAME, using 'name' from your image ⚠️
   const [adminName, setAdminName] = useState("Admin");
-  const [inactiveForDaysCount, setInactiveForDaysCount] = useState(0);
-  const [deactivatedCount, setDeactivatedCount] = useState(0);
+  const [inactiveForDaysCount, setInactiveForDaysCount] = useState(0); // Kept for consistency, but less needed now
+  const [deactivatedCount, setDeactivatedCount] = useState(0); // Kept for consistency, but less needed now
   const [recentJournals, setRecentJournals] = useState<RecentJournal[]>([]);
-  // ⚠️ NEW: Track if current user is admin ⚠️
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // ⚠️ MERGED useEffect: Combines auth state change, admin profile fetch, status updates, and API stats fetch ⚠️
+  // 1. Run the status update function regularly (e.g., every time the component loads)
   useEffect(() => {
-    const fetchDashboardData = async (userId: string) => {
-      try {
-        const dbInstance = sharedDb || getFirestore(sharedApp);
+    const dbInstance = sharedDb || getFirestore(sharedApp);
+    // ⚠️ IMPORTANT: In a real app, this should be run by a Cloud Function/Cron job,
+    // not every time an admin loads the dashboard, to avoid large writes.
+    // However, for a simple client-side solution, this ensures data freshness.
+    updateUserStatusesBasedOnActivity(dbInstance);
+  }, []); // Run only once on component mount
 
-        // Fetch the current admin user's details
+  // 🔑 FIX 1: Initial load. Only fetches admin info and sets up listeners by setting loading=false.
+  useEffect(() => {
+    const dbInstance = sharedDb || getFirestore(sharedApp);
+
+    const fetchAdminData = async (userId: string) => {
+      try {
         const userDocRef = doc(dbInstance, 'users', userId);
         const userDocSnap = await getDoc(userDocRef);
 
@@ -165,143 +173,20 @@ export default function Dashboard() {
           }
           setIsAdmin(userData.role === 'admin');
         }
-
-        // ⚠️ NEW: Fetch stats DIRECTLY from Firestore (same logic as backend)
-        const [usersSnapshot, userActivitySnapshot] = await Promise.all([
-          getDocs(collection(dbInstance, 'users')),
-          getDocs(collection(dbInstance, 'userActivity'))
-        ]);
-
-        // Build stats using same logic as backend
-        // The snapshots are typed as 'any' in your original code
-        const stats = await computeDashboardStatsFromFirestore(usersSnapshot as QuerySnapshot<DocumentData>, userActivitySnapshot as QuerySnapshot<DocumentData>);
-
-        setStats(stats);
-        setError(null);
       } catch (e: any) {
-        console.error("Error fetching dashboard data:", e);
-        setStats(null);
-        setError("Failed to load live data. Please check your network or server.");
+        console.error("Error fetching admin data:", e);
+        setError("Failed to load admin profile.");
       } finally {
+        // Set loading to false here. The onSnapshot listeners will now handle populating the stats.
         setLoading(false);
       }
     };
 
-    // ⚠️ NEW: Extracted function to compute stats (same as backend logic)
-    async function computeDashboardStatsFromFirestore(
-      usersSnapshot: QuerySnapshot<DocumentData>, // Explicit type annotation
-      userActivitySnapshot: QuerySnapshot<DocumentData> // Explicit type annotation
-    ): Promise<DashboardStats> {
-      const usersMap: Record<string, any> = {};
-      // FIX: Added explicit type annotation for 'doc'
-      usersSnapshot.docs.forEach((doc: QueryDocumentSnapshot<DocumentData>) => { 
-        usersMap[doc.id] = doc.data();
-      });
-
-      const userActivityMap: Record<string, any> = {};
-      // FIX: Added explicit type annotation for 'doc'
-      userActivitySnapshot.docs.forEach((doc: QueryDocumentSnapshot<DocumentData>) => { 
-        userActivityMap[doc.id] = doc.data();
-      });
-
-      let totalUsers = 0;
-      let totalActiveUsers = 0;
-      let totalMoodSum = 0;
-      let totalMoodCount = 0;
-      let totalOverallProgress = 0;
-      let totalProgressEntries = 0;
-      let incompleteSessions = 0;
-      let journalsSubmitted = 0;
-      let milestones = 0;
-      let meditationVideoUsers = new Set<string>();
-
-      const now = new Date();
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-
-      for (const userId in usersMap) {
-        const firestoreUser = usersMap[userId];
-        if (firestoreUser.role === 'admin') continue;
-
-        totalUsers++;
-
-        // Simple status check (you can enhance this)
-        const status = String(firestoreUser?.status ?? '').toLowerCase();
-        if (status === 'active') totalActiveUsers++;
-
-        const firestoreActivity = userActivityMap[userId];
-        if (firestoreActivity?.progress) {
-          const progressEntries = Object.values(firestoreActivity.progress) as any[];
-
-          // Mood aggregation
-          progressEntries.forEach((entry: any) => {
-            if (entry?.rating2) {
-              const maybeNum = parseInt(String(entry.rating2).split('/')[0], 10);
-              if (!isNaN(maybeNum)) {
-                totalMoodSum += maybeNum;
-                totalMoodCount++;
-              }
-            }
-          });
-
-          // Overall progress
-          let userCompletedDays = 0;
-          progressEntries.forEach((entry: any) => {
-            if (String(entry?.status || '').toLowerCase() === 'completed') {
-              userCompletedDays++;
-            }
-          });
-
-          if (progressEntries.length > 0) {
-            totalOverallProgress += (userCompletedDays / progressEntries.length) * 100;
-            totalProgressEntries++;
-          }
-
-          // Today's activities
-          const todayProgress = progressEntries.find((entry: any) => {
-            const createdAtTs = new Date(entry?.createdAt || 0).getTime();
-            return createdAtTs >= startOfToday;
-          });
-
-          if (todayProgress) {
-            if (String(todayProgress.status || '').toLowerCase() === 'inprogress') incompleteSessions++;
-            if (todayProgress.journalSubmitted) journalsSubmitted++;
-          }
-
-          // Meditation
-          const todayCompletedMeditations = progressEntries.filter((entry: any) =>
-            entry?.meditationCompleted &&
-            String(entry?.status || '').toLowerCase() === 'completed' &&
-            new Date(entry?.createdAt || 0).getTime() >= startOfToday
-          );
-          if (todayCompletedMeditations.length > 0) meditationVideoUsers.add(userId);
-        }
-      }
-
-      const averageMoodScore = totalMoodCount > 0 ? totalMoodSum / totalMoodCount : 0;
-      const overallProgress = totalProgressEntries > 0 ? totalOverallProgress / totalProgressEntries : 0;
-
-      return {
-        totalUsers,
-        totalActiveUsers,
-        averageMoodScore: `${averageMoodScore.toFixed(1)}/5`,
-        overallProgress,
-        inactiveForDays: totalUsers - totalActiveUsers, // Simple calculation
-        deactivatedCount: 0,
-        milestones,
-        meditationVideoUsers: meditationVideoUsers.size,
-        incompleteSessions,
-        journalsSubmitted,
-        milestoneCountToday: 0, // Will be updated by separate useEffect
-      };
-    }
-
-    // ⚠️ FETCHING ADMIN NAME AND DASHBOARD STATS ⚠️
     const authInstance = sharedAuth || getAuth(sharedApp);
     const unsubscribe = onAuthStateChanged(authInstance, (user) => {
       if (user) {
-        // User is signed in, fetch data
-        setLoading(true);
-        fetchDashboardData(user.uid);
+        // Start admin data fetch immediately
+        fetchAdminData(user.uid);
       } else {
         // User is signed out
         setLoading(false);
@@ -313,8 +198,7 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, []);
 
-  // ⚠️ Updated users snapshot: Only update "Total Active Users" and "Inactive Participants" (inactiveForDays) ⚠️
-  // Removed dependency on recentJournals to prevent unnecessary re-computes; journalsSubmitted now preserved from API/daily digest
+  // 🚀 START OF REAL-TIME STATUS UPDATES (The core counting logic is here) 🚀
   useEffect(() => {
     const dbInstance = sharedDb || getFirestore(sharedApp);
     const usersCol = collection(dbInstance, "users");
@@ -322,49 +206,57 @@ export default function Dashboard() {
     const unsubscribeUsers = onSnapshot(usersCol, (snap) => {
       try {
         let activeCount = 0;
-        let inactiveCount = 0;
-        let pendingActivationCount = 0; // Keep for deactivatedCount if needed
+        let inactiveCount = 0; // Inactive users (7+ days, status: 'inactive')
+        let pendingActivationCount = 0; // Pending users (userStatus: false)
+        let totalParticipants = 0;
 
-        // FIX: Added explicit type annotation for 'docSnap'
-        snap.docs.forEach((docSnap: QueryDocumentSnapshot<DocumentData>) => { 
+        snap.docs.forEach((docSnap: QueryDocumentSnapshot<DocumentData>) => {
           const data: any = docSnap.data();
           if ((data?.role ?? "") === "admin") return; // skip admin users
 
-          // NEW logic to match Participants page
-          const status = String(data?.status ?? '').toLowerCase();
+          totalParticipants++;
 
-          if (status === "active") {
-            activeCount++;
-          } else if (status === "pending" || status === "deactivated") {
+          // 1. Identify Pending Users based on 'userStatus' boolean
+          const userStatusBoolean = data?.userStatus;
+          if (userStatusBoolean === false) {
             pendingActivationCount++;
-          } else if (status === "inactive") {
+            return; // Pending users are not counted as active/inactive
+          }
+
+          const status = String(data?.status ?? 'active').toLowerCase();
+          
+          if (status === "inactive") {
             inactiveCount++;
+          } else {
+            activeCount++;
           }
         });
 
-        console.log("🟢 Active:", activeCount);
-        console.log("🔴 Inactive:", inactiveCount);
-        console.log("🕒 Pending Activation:", pendingActivationCount);
+        // 🎯 CALCULATIONS FOR DASHBOARD 🎯
+        const totalUsers = totalParticipants; // Total Participants = Active + Inactive + Pending
+        const actualActiveCount = totalUsers - inactiveCount - pendingActivationCount;
 
-        // ⚠️ ONLY UPDATE SPECIFIED FIELDS: totalActiveUsers and inactiveForDays; preserve all others from API ⚠️
+
+        // Update states for top stats and alerts
         setStats((prev) => ({
           ...(prev || defaultStats),
-          totalActiveUsers: activeCount,
-          inactiveForDays: inactiveCount,
+          totalUsers: totalUsers,
+          totalActiveUsers: actualActiveCount, // 🎯 Use the refined calculation
+          inactiveForDays: inactiveCount, // 🎯 Only the 7+ days inactive count
+          deactivatedCount: pendingActivationCount,
+          // Preserve other stats like mood/progress until their listeners update
         }));
 
-        setInactiveForDaysCount(inactiveCount);
-        setDeactivatedCount(pendingActivationCount);
       } catch (err) {
         console.warn("❌ Dashboard snapshot error:", err);
       }
     });
 
     return () => unsubscribeUsers();
-  }, []); // Removed [recentJournals] dep
+  }, []);
+  // 🚀 END OF REAL-TIME STATUS UPDATES 🚀
 
   // ⚠️ NEW useEffect hook to count 28-day milestones achieved today
-  // ⚠️ Note: This updates milestoneCountToday; if you don't want real-time changes here, comment out the setStats call below ⚠️
   useEffect(() => {
     const dbInstance = sharedDb || getFirestore(sharedApp);
     const today = new Date();
@@ -384,7 +276,7 @@ export default function Dashboard() {
         if (dateLike instanceof Date) return dateLike;
         if (typeof dateLike === 'number') return new Date(dateLike);
         if (typeof dateLike === 'string') return new Date(dateLike);
-      } catch { }
+      } catch { /* ignore */ }
       return null;
     };
 
@@ -419,8 +311,6 @@ export default function Dashboard() {
         console.warn('Failed to compute today\'s milestone count:', err);
       }
 
-      // ⚠️ MERGE: Update only milestoneCountToday, preserve other data ⚠️
-      // If you don't want this to change after initial API load, comment out the setStats below
       setStats((prev) => {
         const next = prev ? { ...prev } : { ...defaultStats };
         next.milestoneCountToday = todayMilestones.size;
@@ -431,11 +321,13 @@ export default function Dashboard() {
     const unsubRoot = onSnapshot(collection(dbInstance, 'userActivity'), (snap) => handleSnapshot(snap.docs));
     const unsubReport = onSnapshot(collectionGroup(dbInstance, 'report'), (snap) => handleSnapshot(snap.docs));
 
-    return () => { try { unsubRoot(); } catch { } try { unsubReport(); } catch { } };
+    // Clean up both listeners
+    return () => { unsubRoot(); unsubReport(); };
   }, []);
 
-  // ⚠️ PRESERVED: Live Daily Digest counts from Firestore (today's completed, in-progress/pending, and feedback submissions) ⚠️
-  // This useEffect is fully intact to maintain the Daily Digest functionality with real-time updates
+  // 🚀 START OF DAILY DIGEST FIX (This is the primary source for daily activity metrics) 🚀
+  // 🔑 FIX 2: Removed totalActiveUsers from dependency array to prevent unnecessary re-runs
+  // We fetch roles inside the listener setup now.
   useEffect(() => {
     const dbInstance = sharedDb || getFirestore(sharedApp);
 
@@ -467,8 +359,9 @@ export default function Dashboard() {
       today: Date,
       rolesMap: Map<string, boolean> | null
     ) => {
-      // Skip if admin and current is admin
+      // Skip if admin 
       if (rolesMap && rolesMap.get(uid)) return;
+
       if (!data) return;
       const maybeProgress = data.progress && typeof data.progress === 'object' ? data.progress : undefined;
       const entriesSource = maybeProgress ? maybeProgress : Object.keys(data)
@@ -510,7 +403,7 @@ export default function Dashboard() {
       }
     };
 
-    (async () => {
+    const setupListeners = async () => {
       const rolesMap = await fetchRolesMap();
 
       const unsubscribeRoot = onSnapshot(collection(dbInstance, 'userActivity'), (snap) => {
@@ -538,8 +431,7 @@ export default function Dashboard() {
         }
       });
 
-      // Some projects stored entries inside a nested subcollection named "userActivity" under each userActivity doc.
-      // This collectionGroup listener captures that alternate structure and merges counts.
+      // This collectionGroup listener captures alternate structures.
       const unsubscribeGroup = onSnapshot(collectionGroup(dbInstance, 'userActivity'), (snap) => {
         try {
           const today = new Date();
@@ -548,7 +440,7 @@ export default function Dashboard() {
           const feedbackUsers = new Set<string>();
 
           snap.docs.forEach((docSnap) => {
-            const uid = docSnap.ref.parent.parent?.id || docSnap.id; // parent of subcollection doc is the user id
+            const uid = docSnap.ref.parent.parent?.id || docSnap.id;
             processProgressEntries(uid, docSnap.data(), completedUsers, pendingUsers, feedbackUsers, today, rolesMap);
           });
 
@@ -571,10 +463,16 @@ export default function Dashboard() {
         unsubscribeRoot();
         unsubscribeGroup();
       };
-    })();
-  }, [isAdmin]);
+    };
 
-  // Populate recent journals submitted today with name, feedback and chapter/day, excluding admins if current is admin
+    const cleanup = setupListeners();
+    // Since setupListeners returns a promise of the cleanup function, 
+    // we use .then to ensure cleanup runs correctly.
+    return () => { cleanup.then(unsub => unsub()); };
+  }, [isAdmin]); // 🔑 FIX: Removed stats?.totalActiveUsers from dependency array
+
+
+  // Populate recent journals submitted today
   useEffect(() => {
     const dbInstance = sharedDb || getFirestore(sharedApp);
     let mounted = true;
@@ -598,42 +496,26 @@ export default function Dashboard() {
       return d.toDateString() === ref.toDateString();
     };
 
-    const fetchUsersMap = async () => {
+    const fetchUsersAndRoles = async () => {
       try {
         const snaps = await getDocs(collection(dbInstance, 'users'));
-        const map = new Map<string, string>();
+        const usersMap = new Map<string, string>();
+        const rolesMap = new Map<string, boolean>();
         snaps.docs.forEach((d) => {
           const data: any = d.data();
-          // Skip admins if current user is admin
-          if (isAdmin && (data?.role ?? '') === 'admin') return;
+          rolesMap.set(d.id, data?.role === 'admin');
           const name = data?.fullName || data?.name || data?.displayName || data?.email || 'Unknown User';
-          map.set(d.id, name);
+          usersMap.set(d.id, name);
         });
-        return map;
+        return { usersMap, rolesMap };
       } catch (err) {
-        console.warn('Failed to fetch users map for recent journals:', err);
-        return new Map<string, string>();
-      }
-    };
-
-    const fetchRolesMap = async () => {
-      try {
-        const snaps = await getDocs(collection(dbInstance, 'users'));
-        const map = new Map<string, boolean>();
-        snaps.docs.forEach((d) => {
-          const data: any = d.data();
-          map.set(d.id, data?.role === 'admin');
-        });
-        return map;
-      } catch (err) {
-        console.warn('Failed to fetch roles map for recent journals:', err);
-        return new Map<string, boolean>();
+        console.warn('Failed to fetch user and role maps:', err);
+        return { usersMap: new Map<string, string>(), rolesMap: new Map<string, boolean>() };
       }
     };
 
     (async () => {
-      const usersMap = await fetchUsersMap();
-      const rolesMap = await fetchRolesMap();
+      const { usersMap, rolesMap } = await fetchUsersAndRoles();
       const today = new Date();
 
       const processDoc = (docSnap: any) => {
@@ -705,7 +587,7 @@ export default function Dashboard() {
 
       return () => {
         mounted = false;
-        try { unsubscribe?.(); } catch { }
+        try { unsubscribe(); } catch { /* ignore */ }
       };
     })();
   }, [isAdmin]);
@@ -714,7 +596,11 @@ export default function Dashboard() {
   const circumference = 283;
   const progressLength = (progress / 100) * circumference;
 
-  // The cards that will be rendered next to the progress card
+  // Use totalUsers for Daily Digest denominator
+  const totalParticipants = stats?.totalUsers || 0;
+  const safeTotalParticipants = totalParticipants > 0 ? totalParticipants : 1;
+
+  // 🎯 Total Active Users Card Value - Now uses the correct count
   const cardStats = [
     {
       title: "Total Active Users",
@@ -828,7 +714,7 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* ⚠️ PRESERVED: Daily Digest Card - Fully intact with progress bars for meditation, incomplete, and journals ⚠️ */}
+          {/* ⚠️ Daily Digest Card (FIXED denominator) ⚠️ */}
           <Card className="bg-white rounded-2xl shadow-md border border-gray-200">
             <CardHeader className="pb-2 border-b border-[#125566]">
               <div className="flex justify-between items-start w-full">
@@ -838,49 +724,66 @@ export default function Dashboard() {
                   </CardTitle>
                   <p className="text-sm text-gray-500">Today's activity summary</p>
                 </div>
-                {/* <button className="px-6 py-2 bg-gray-100 text-sm rounded-lg font-medium text-[#125566] hover:bg-gray-200">
-                  View All
-                </button> */}
               </div>
             </CardHeader>
             <CardContent className="p-4 space-y-6">
-              {/* Meditation Videos Completed Today (count/activeTotal) */}
+              {/* Meditation Videos Completed Today */}
               <div>
                 <div className="flex justify-between items-center text-sm pb-1">
                   <span>Users who complete meditations videos</span>
-                  <span className="font-semibold text-[#125566]">{`${stats?.meditationVideoUsers ?? 0}/${stats?.totalActiveUsers ?? 0}`}</span>
+                  <span className="font-semibold text-[#125566]">
+                    {`${stats?.meditationVideoUsers ?? 0}/${stats?.totalUsers ?? 0}`}
+                  </span>
                 </div>
                 <div className="w-full bg-gray-200 h-2 rounded-full">
                   <div
                     className="bg-[#5FB3B3] h-2 rounded-full"
-                    style={{ width: `${Math.min((stats?.totalActiveUsers ?? 0) > 0 ? ((stats?.meditationVideoUsers ?? 0) / (stats?.totalActiveUsers ?? 1)) * 100 : 0, 100)}%` }}
-                  ></div>
+                    style={{
+                      width: `${stats?.totalUsers && stats.totalUsers > 0
+                        ? (stats.meditationVideoUsers / stats.totalUsers) * 100
+                        : 0}%`
+                    }}
+                  />
                 </div>
               </div>
-              {/* Incomplete/Pending Today (count/activeTotal) */}
+
+              {/* Incomplete/Pending Today */}
               <div>
                 <div className="flex justify-between items-center text-sm pb-1">
                   <span>Users who Pending/incomplete sessions</span>
-                  <span className="font-semibold text-[#125566]">{`${stats?.incompleteSessions ?? 0}/${stats?.totalActiveUsers ?? 0}`}</span>
+                  <span className="font-semibold text-[#125566]">
+                    {`${stats?.incompleteSessions ?? 0}/${stats?.totalUsers ?? 0}`}
+                  </span>
                 </div>
                 <div className="w-full bg-gray-200 h-2 rounded-full">
                   <div
                     className="bg-[#C4B5FD] h-2 rounded-full"
-                    style={{ width: `${Math.min(100, Math.max(0, (stats?.totalActiveUsers ?? 0) > 0 ? ((stats?.incompleteSessions ?? 0) / (stats?.totalActiveUsers ?? 1)) * 100 : 0))}%`, }}
-                  ></div>
+                    style={{
+                      width: `${stats?.totalUsers && stats.totalUsers > 0
+                        ? (stats.incompleteSessions / stats.totalUsers) * 100
+                        : 0}%`
+                    }}
+                  />
                 </div>
               </div>
-              {/* Feedback Submitted Today (count/activeTotal) */}
+
+              {/* Journals Submitted Today */}
               <div>
                 <div className="flex justify-between items-center text-sm pb-1">
                   <span>Users who Journals Submitted</span>
-                  <span className="font-semibold text-[#125566]">{`${stats?.journalsSubmitted ?? 0}/${stats?.totalActiveUsers ?? 0}`}</span>
+                  <span className="font-semibold text-[#125566]">
+                    {`${stats?.journalsSubmitted ?? 0}/${stats?.totalUsers ?? 0}`}
+                  </span>
                 </div>
                 <div className="w-full bg-gray-200 h-2 rounded-full">
                   <div
                     className="bg-[#FF8B6A] h-2 rounded-full"
-                    style={{ width: `${Math.min(100, Math.max(0, (stats?.totalActiveUsers ?? 0) > 0 ? ((stats?.journalsSubmitted ?? 0) / (stats?.totalActiveUsers ?? 1)) * 100 : 0))}%`, }}
-                  ></div>
+                    style={{
+                      width: `${stats?.totalUsers && stats.totalUsers > 0
+                        ? (stats.journalsSubmitted / stats.totalUsers) * 100
+                        : 0}%`
+                    }}
+                  />
                 </div>
               </div>
             </CardContent>
@@ -897,21 +800,18 @@ export default function Dashboard() {
                     Important updates requiring attention
                   </p>
                 </div>
-                {/* <button className="px-6 py-2 bg-gray-100 text-sm rounded-lg font-medium text-[#125566] hover:bg-gray-200">
-                  View All
-                </button> */}
               </div>
             </CardHeader>
             <CardContent className="p-4 space-y-3">
-              {/* Inactive Users Alert - Now reflects updated statuses */}
+              {/* Inactive Users Alert - Now reflects updated statuses (7-day rule) */}
               <div className="flex items-center gap-3 p-3 rounded-xl border border-yellow-300 bg-yellow-50 text-sm">
                 <img src={profilyellow} alt="Inactive icon" className="w-5 h-5" />
-                <p>{stats?.inactiveForDays ?? 0} Inactive Participants</p>
+                <p>{stats?.inactiveForDays ?? 0} Inactive Participants (7+ days)</p>
               </div>
-              {/* Streak Break Alert - Text updated as requested */}
+              {/* Pending Participants (userStatus === false) */}
               <div className="flex items-center gap-3 p-3 rounded-xl border border-red-300 bg-red-50 text-sm">
                 <img src={redheart} alt="Pending icon" className="w-5 h-5" />
-                <p>{stats?.deactivatedCount ?? 0} Pending Participants</p>
+                <p>{stats?.deactivatedCount ?? 0} Pending Participants (Manual Activation Required)</p>
               </div>
               {/* Milestone Alert */}
               <div className="flex items-center gap-3 p-3 rounded-xl border border-green-300 bg-green-50 text-sm">
@@ -935,9 +835,6 @@ export default function Dashboard() {
                     Last participations reactions and insights
                   </p>
                 </div>
-                {/* <button className="px-6 py-2 bg-gray-100 text-sm rounded-lg font-medium text-[#125566] hover:bg-gray-200">
-                  View All
-                </button> */}
               </div>
             </CardHeader>
             <CardContent className="p-6">
@@ -970,7 +867,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
-      </main>
-    </div>
+      </main >
+    </div >
   );
 }

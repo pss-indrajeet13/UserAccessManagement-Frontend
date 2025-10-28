@@ -34,6 +34,9 @@ export default function ProfileHeader({
   const [reportProgress, setReportProgress] = useState<number | null>(null);
   const [avgStress, setAvgStress] = useState<number | null>(null);
   const [listeningHours, setListeningHours] = useState<number | null>(null);
+  
+  // 🆕 New state for the progress score from segment0.sectionProfile
+  const [segmentProgressScore, setSegmentProgressScore] = useState<number | null>(null);
 
   // State to hold the current active status.
   const [isActive, setIsActive] = useState<boolean | null>(null);
@@ -71,6 +74,47 @@ export default function ProfileHeader({
     loadProgress();
     return () => { mounted = false; };
   }, [user?.uid]);
+  
+  // 🆕 New useEffect to fetch progressScore from userActivity/{uid}/segment0/sectionProfile
+  useEffect(() => {
+    let mounted = true;
+    const loadSegmentProfileProgress = async () => {
+      try {
+        const uid = user?.uid || user?.id;
+        if (!uid) {
+          if (mounted) setSegmentProgressScore(null);
+          return;
+        }
+
+        const uaSnap = await getDoc(doc(db, 'userActivity', uid));
+        if (!uaSnap.exists()) {
+          if (mounted) setSegmentProgressScore(null);
+          return;
+        }
+
+        const data: any = uaSnap.data();
+        // Access the nested field: userActivity -> segment0 -> sectionProfile -> progressScore
+        const score = data?.segment0?.sectionProfile?.progressScore;
+        
+        if (mounted) {
+          if (typeof score === 'number' && !isNaN(score)) {
+             // Normalize to 0-100% and round for display
+             const normalizedScore = Math.max(0, Math.min(100, Math.round(score)));
+             setSegmentProgressScore(normalizedScore);
+          } else {
+             setSegmentProgressScore(null);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching segment profile progress:", err);
+        if (mounted) setSegmentProgressScore(null);
+      }
+    };
+    
+    loadSegmentProfileProgress();
+    return () => { mounted = false; };
+  }, [user?.uid]);
+
 
   // Derive Avg Stress and Total Listening from userActivity.progress
   useEffect(() => {
@@ -482,7 +526,8 @@ export default function ProfileHeader({
 
       pdfDoc.setFontSize(12);
       pdfDoc.setFont('', 'normal');
-      pdfDoc.text(`Program Progress: ${reportProgress ?? user?.progress ?? 0}%`, 20, yPosition);
+      // ➡️ Using the most specific progress score available
+      pdfDoc.text(`Program Progress: ${segmentProgressScore ?? reportProgress ?? user?.progress ?? 0}%`, 20, yPosition);
       yPosition += 7;
       pdfDoc.text(`Average Stress Level: ${avgStress !== null ? `${avgStress}/5` : 'N/A'}`, 20, yPosition);
       yPosition += 7;
@@ -603,11 +648,11 @@ export default function ProfileHeader({
             pdfDoc.text(`${day.toUpperCase()} Demographics:`, 20, yPosition);
             yPosition += 7;
             const dem = demographics[day];
-            if (dem.BMI) { pdfDoc.text(`  BMI: ${dem.BMI}`, 25, yPosition); yPosition += 7; }
-            if (dem.alcoholUse) { pdfDoc.text(`  Alcohol Use: ${dem.alcoholUse}`, 25, yPosition); yPosition += 7; }
+            if (dem.BMI) { pdfDoc.text(`  BMI: ${dem.BMI}`, 25, yPosition); yPosition += 7; }
+            if (dem.alcoholUse) { pdfDoc.text(`  Alcohol Use: ${dem.alcoholUse}`, 25, yPosition); yPosition += 7; }
             if (dem.copingMechanisms) { 
               const copingStr = Array.isArray(dem.copingMechanisms) ? dem.copingMechanisms.join(', ') : dem.copingMechanisms || 'N/A';
-              pdfDoc.text(`  Coping Mechanisms: ${copingStr}`, 25, yPosition); 
+              pdfDoc.text(`  Coping Mechanisms: ${copingStr}`, 25, yPosition); 
               yPosition += 7; 
             }
             // Add more fields as per schema
@@ -764,9 +809,13 @@ export default function ProfileHeader({
           <div className="flex justify-between items-center">
             <div className="flex flex-col">
               <div className="text-4xl font-bold" style={{ color: '#5FB3B3' }}>
-                {`${reportProgress ?? user?.progress ?? 0}%`}
+                {/* ➡️ Use the segmentProgressScore first, then fallback to others */}
+                {`${segmentProgressScore ?? reportProgress ?? user?.progress ?? 0}%`}
               </div>
-              <div className="text-gray-500 text-sm mt-2">Program progress</div>
+              <div className="text-gray-500 text-sm mt-2">
+                {/* ➡️ Updated label */}
+                {segmentProgressScore !== null ? 'Segment 0 Profile Progress' : 'Program progress'}
+              </div>
             </div>
             <img src={ProgressIcon} alt="Progress" className="w-10 h-10" />
           </div>
