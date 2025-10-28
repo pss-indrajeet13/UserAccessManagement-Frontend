@@ -188,11 +188,11 @@ const Chapters: React.FC = () => {
     fetchChaptersData();
   }, []);
 
-  const data = [
-    { name: "Completed", value: stats.completed, color: "#4CAF50" },
-    { name: "Active", value: stats.active, color: "#9C27B0" },
-    { name: "Upcoming", value: stats.upcoming, color: "#FFCA28" },
-  ];
+  // const data = [
+  //   { name: "Completed", value: stats.completed, color: "#4CAF50" },
+  //   { name: "Active", value: stats.active, color: "#9C27B0" },
+  //   { name: "Upcoming", value: stats.upcoming, color: "#FFCA28" },
+  // ];
 
   return (
     <div className="font-poppins bg-gray-100 min-h-screen">
@@ -209,7 +209,7 @@ const Chapters: React.FC = () => {
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           {/* ✅ Card 1: Overall Chapters Progress */}
-          <div className="bg-white rounded-lg shadow border border-gray-200">
+          {/* <div className="bg-white rounded-lg shadow border border-gray-200">
             <CardHeader
               className="pb-2 border-b"
               style={{ borderColor: "#125566" }}
@@ -262,7 +262,7 @@ const Chapters: React.FC = () => {
                 </div>
               </div>
             </div>
-          </div>
+          </div> */}
 
           {/* ✅ Card 2: Avg Completion Rate */}
           <div className="bg-white rounded-lg shadow border border-gray-200">

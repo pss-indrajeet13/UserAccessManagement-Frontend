@@ -1,7 +1,7 @@
 // src/pages/dashboard.tsx
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import "@fontsource/poppins";
+// import "@fontsource/poppins";
 import "@fontsource/poppins/500.css";
 import "@fontsource/poppins/600.css";
 import "@fontsource/poppins/700.css";
@@ -25,13 +25,14 @@ interface DashboardStats {
   totalActiveUsers: number;
   averageMoodScore: string;
   overallProgress: number;
-  inactiveForDays: number; // Users inactive for 7+ days (status: 'inactive')
-  deactivatedCount: number; // Users pending activation (userStatus: false)
+  inactiveForDays: number; // Users inactive for 2+ days (based on last activity timestamps)
+  deactivatedCount: number; // Users pending/deactivated
   milestones: number;
   meditationVideoUsers: number;
   incompleteSessions: number;
   journalsSubmitted: number;
   milestoneCountToday: number;
+  day28CompletedCount: number;
 }
 
 type RecentJournal = {
@@ -60,6 +61,7 @@ const defaultStats: DashboardStats = {
   incompleteSessions: 0,
   journalsSubmitted: 0,
   milestoneCountToday: 0,
+  day28CompletedCount: 0,
 };
 
 /**
@@ -206,9 +208,24 @@ export default function Dashboard() {
     const unsubscribeUsers = onSnapshot(usersCol, (snap) => {
       try {
         let activeCount = 0;
-        let inactiveCount = 0; // Inactive users (7+ days, status: 'inactive')
-        let pendingActivationCount = 0; // Pending users (userStatus: false)
+        let inactiveCount = 0; // Inactive users (2+ days)
+        let pendingActivationCount = 0; // Pending or deactivated users
         let totalParticipants = 0;
+
+        const twoDaysMs = 2 * 24 * 60 * 60 * 1000;
+        const now = Date.now();
+
+        const toDate = (value: any): Date | null => {
+          try {
+            if (!value) return null;
+            if (typeof value?.toDate === 'function') return value.toDate();
+            if (typeof value?.toMillis === 'function') return new Date(value.toMillis());
+            if (value instanceof Date) return value;
+            if (typeof value === 'number') return new Date(value);
+            if (typeof value === 'string') return new Date(value);
+          } catch { return null; }
+          return null;
+        };
 
         snap.docs.forEach((docSnap: QueryDocumentSnapshot<DocumentData>) => {
           const data: any = docSnap.data();
@@ -216,35 +233,46 @@ export default function Dashboard() {
 
           totalParticipants++;
 
-          // 1. Identify Pending Users based on 'userStatus' boolean
-          const userStatusBoolean = data?.userStatus;
-          if (userStatusBoolean === false) {
+          const statusRaw = String(data?.status ?? '').toLowerCase();
+          const userStatus = data?.userStatus;
+
+          const isPendingOrDeactivated =
+            userStatus === false ||
+            userStatus === 'false' ||
+            userStatus === 0 ||
+            statusRaw === 'pending' ||
+            statusRaw === 'deactivated' ||
+            statusRaw === 'disabled' ||
+            statusRaw === 'suspended';
+
+          if (isPendingOrDeactivated) {
             pendingActivationCount++;
-            return; // Pending users are not counted as active/inactive
+            return; // Pending/Deactivated users are not counted as active/inactive
           }
 
-          const status = String(data?.status ?? 'active').toLowerCase();
-          
-          if (status === "inactive") {
+          const lastTs =
+            data?.lastActive || data?.lastSignIn || data?.lastLogin || data?.lastSeen || data?.updatedAt || data?.createdAt;
+
+          const lastDate = toDate(lastTs);
+          const isInactive = !lastDate || now - lastDate.getTime() >= twoDaysMs;
+
+          if (isInactive) {
             inactiveCount++;
           } else {
             activeCount++;
           }
         });
 
-        // 🎯 CALCULATIONS FOR DASHBOARD 🎯
-        const totalUsers = totalParticipants; // Total Participants = Active + Inactive + Pending
+        const totalUsers = totalParticipants; // Total Participants = Active + Inactive + Pending/Deactivated
         const actualActiveCount = totalUsers - inactiveCount - pendingActivationCount;
-
 
         // Update states for top stats and alerts
         setStats((prev) => ({
           ...(prev || defaultStats),
           totalUsers: totalUsers,
-          totalActiveUsers: actualActiveCount, // 🎯 Use the refined calculation
-          inactiveForDays: inactiveCount, // 🎯 Only the 7+ days inactive count
+          totalActiveUsers: actualActiveCount,
+          inactiveForDays: inactiveCount, // 2+ days inactive
           deactivatedCount: pendingActivationCount,
-          // Preserve other stats like mood/progress until their listeners update
         }));
 
       } catch (err) {
@@ -256,27 +284,24 @@ export default function Dashboard() {
   }, []);
   // 🚀 END OF REAL-TIME STATUS UPDATES 🚀
 
-  // ⚠️ NEW useEffect hook to count 28-day milestones achieved today
+  // ⚠️ Count 28-day completions (overall) and also today's
   useEffect(() => {
     const dbInstance = sharedDb || getFirestore(sharedApp);
-    const today = new Date();
 
     const isSameDay = (d: Date | null, ref: Date) => {
       if (!d || Number.isNaN(d.getTime())) return false;
       return d.toDateString() === ref.toDateString();
     };
 
-    // Helper to get a completion date from a progress entry
     const getCompletionDate = (entry: any): Date | null => {
       if (!entry) return null;
       const dateLike = entry.completedAt || entry.date || entry.timestamp || entry.updatedAt || entry.createdAt;
-      if (!dateLike) return null;
       try {
         if (typeof dateLike?.toDate === 'function') return dateLike.toDate();
         if (dateLike instanceof Date) return dateLike;
         if (typeof dateLike === 'number') return new Date(dateLike);
         if (typeof dateLike === 'string') return new Date(dateLike);
-      } catch { /* ignore */ }
+      } catch {}
       return null;
     };
 
@@ -285,9 +310,10 @@ export default function Dashboard() {
       return s === 'completed' || s === 'complete' || s === 'done' || s === 'success' || s === 'finished' || s === 'true';
     };
 
-    // FIX: Added explicit type annotation for 'docs'
-    const handleSnapshot = (docs: QueryDocumentSnapshot<DocumentData>[]) => {
-      const todayMilestones = new Set<string>();
+    const computeCounts = (docs: QueryDocumentSnapshot<DocumentData>[]) => {
+      const today = new Date();
+      const todaySet = new Set<string>();
+      const allSet = new Set<string>();
       try {
         docs.forEach((docSnap: any) => {
           const uid = docSnap.ref?.parent?.parent?.id || docSnap.id;
@@ -299,29 +325,40 @@ export default function Dashboard() {
             if (/^day[ _-]?28$/i.test(k)) {
               const entry = (progress as any)[k];
               if (isCompleted(entry?.status) || entry === true) {
+                allSet.add(uid);
                 const completionDate = getCompletionDate(entry);
                 if (completionDate && isSameDay(completionDate, today)) {
-                  todayMilestones.add(uid);
+                  todaySet.add(uid);
                 }
               }
             }
           }
         });
       } catch (err) {
-        console.warn('Failed to compute today\'s milestone count:', err);
+        console.warn("Failed to compute 28-day counts:", err);
       }
-
-      setStats((prev) => {
-        const next = prev ? { ...prev } : { ...defaultStats };
-        next.milestoneCountToday = todayMilestones.size;
-        return next;
-      });
+      return { today: todaySet.size, all: allSet.size };
     };
 
-    const unsubRoot = onSnapshot(collection(dbInstance, 'userActivity'), (snap) => handleSnapshot(snap.docs));
-    const unsubReport = onSnapshot(collectionGroup(dbInstance, 'report'), (snap) => handleSnapshot(snap.docs));
+    const unsubRoot = onSnapshot(collection(dbInstance, 'userActivity'), (snap) => {
+      const c = computeCounts(snap.docs);
+      setStats((prev) => {
+        const next = prev ? { ...prev } : { ...defaultStats };
+        next.milestoneCountToday = Math.max(next.milestoneCountToday || 0, c.today);
+        next.day28CompletedCount = Math.max(next.day28CompletedCount || 0, c.all);
+        return next;
+      });
+    });
+    const unsubReport = onSnapshot(collectionGroup(dbInstance, 'report'), (snap) => {
+      const c = computeCounts(snap.docs);
+      setStats((prev) => {
+        const next = prev ? { ...prev } : { ...defaultStats };
+        next.milestoneCountToday = Math.max(next.milestoneCountToday || 0, c.today);
+        next.day28CompletedCount = Math.max(next.day28CompletedCount || 0, c.all);
+        return next;
+      });
+    });
 
-    // Clean up both listeners
     return () => { unsubRoot(); unsubReport(); };
   }, []);
 
@@ -806,18 +843,18 @@ export default function Dashboard() {
               {/* Inactive Users Alert - Now reflects updated statuses (7-day rule) */}
               <div className="flex items-center gap-3 p-3 rounded-xl border border-yellow-300 bg-yellow-50 text-sm">
                 <img src={profilyellow} alt="Inactive icon" className="w-5 h-5" />
-                <p>{stats?.inactiveForDays ?? 0} Inactive Participants (7+ days)</p>
+                <p>{stats?.inactiveForDays ?? 0} Inactive Participants (2+ days)</p>
               </div>
               {/* Pending Participants (userStatus === false) */}
               <div className="flex items-center gap-3 p-3 rounded-xl border border-red-300 bg-red-50 text-sm">
                 <img src={redheart} alt="Pending icon" className="w-5 h-5" />
-                <p>{stats?.deactivatedCount ?? 0} Pending Participants (Manual Activation Required)</p>
+                <p>{stats?.deactivatedCount ?? 0} Pending/Deactivated Participants</p>
               </div>
               {/* Milestone Alert */}
               <div className="flex items-center gap-3 p-3 rounded-xl border border-green-300 bg-green-50 text-sm">
                 <img src={greenlabel} alt="Milestone icon" className="w-5 h-5" />
                 <p>
-                  {stats?.milestoneCountToday ?? 0} users achieved 28-days milestone today
+                  {stats?.day28CompletedCount ?? 0} users achieved 28-days milestone
                 </p>
               </div>
             </CardContent>
